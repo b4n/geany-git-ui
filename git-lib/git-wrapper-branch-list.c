@@ -58,7 +58,10 @@ git_branch_list_finish_callback (gboolean     success,
     error = g_error_new_literal (GIT_WRAPPER_ERROR,
                                  GIT_WRAPPER_ERROR_CHILD_CRASHED,
                                  "Git crashed");
-  } else if (return_value == 0) {
+  } else if (return_value != 0) {
+    error = g_error_new (GIT_WRAPPER_ERROR, GIT_WRAPPER_ERROR_FAILED,
+                         "Git failed: %s", standard_error);
+  } else {
     standard_error = NULL;
     branches = git_branch_list_parse_output (standard_output, &current_branch);
   }
