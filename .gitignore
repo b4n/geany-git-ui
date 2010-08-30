@@ -1,0 +1,23 @@
+# aututools specific generated files/dirs
+build/
+.deps/
+.libs/
+autom4te.cache/
+configure
+libtool
+Makefile
+Makefile.in
+config.*
+/stamp-*
+*.stamp
+
+# may be removed if some .m4 or .make became manually generated
+*.m4
+*.make
+
+# generated files suffixes
+*.o
+*.a
+*.lo
+*.la
+*.so
