@@ -261,7 +261,8 @@ git_log_sync_result_callback (GList       *commits,
   GitLogSyncPrivate *priv = data;
   
   if (error) {
-    priv->error = g_error_new_literal (0, 0, error);
+    priv->error = g_error_new_literal (GIT_WRAPPER_ERROR,
+                                       GIT_WRAPPER_ERROR_FAILED, error);
   } else {
     for (; commits; commits = commits->next) {
       priv->commits = g_list_prepend (priv->commits,

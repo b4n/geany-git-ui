@@ -86,6 +86,18 @@ struct _GitWrapperPrivate
   gpointer            callback_data;
 };
 
+GQuark
+git_wrapper_error_quark (void)
+{
+  static GQuark q = 0;
+  
+  if (G_UNLIKELY (q == 0)) {
+    q = g_quark_from_static_string ("git-wrapper");
+  }
+  
+  return q;
+}
+
 static GitWrapperPrivate *
 git_wrapper_private_new (void)
 {
