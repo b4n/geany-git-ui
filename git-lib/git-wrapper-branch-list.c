@@ -52,16 +52,19 @@ git_branch_list_finish_callback (gboolean     success,
   GitBranchListPrivate *priv = data;
   GList                *branches = NULL;
   const gchar          *current_branch = NULL;
+  GError               *error = NULL;
   
   if (! success) {
-    standard_error = "Oops, git crashed";
+    error = g_error_new_literal (GIT_WRAPPER_ERROR,
+                                 GIT_WRAPPER_ERROR_CHILD_CRASHED,
+                                 "Git crashed");
   } else if (return_value == 0) {
     standard_error = NULL;
     branches = git_branch_list_parse_output (standard_output, &current_branch);
   }
   
-  priv->callback (branches, current_branch, standard_error, priv->callback_data);
-  
+  priv->callback (branches, current_branch, error, priv->callback_data);
+  if (error) g_error_free (error);
   g_list_free_full (branches, g_free);
   g_slice_free1 (sizeof *priv, priv);
 }
@@ -83,7 +86,8 @@ git_branch_list (const gchar           *dir,
     /* FIXME: call this from inside the GMainLoop for the thread things to be
      * the same as a successful call.
      * Use E.g. a timeout (very short) or an idle */
-    callback (NULL, NULL, err->message, data);
+    callback (NULL, NULL, err, data);
+    g_error_free (err);
     g_slice_free1 (sizeof *priv, priv);
   }
 }

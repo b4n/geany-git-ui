@@ -27,14 +27,14 @@ loop_pop (void)
 
 
 static void
-log_result_callback (GList       *commits,
-                     const gchar *error,
-                     gpointer     data)
+log_result_callback (GList         *commits,
+                     const GError  *error,
+                     gpointer       data)
 {
   loop_pop ();
   
   if (error) {
-    g_warning ("%s", error);
+    g_warning ("%s", error->message);
   } else {
     printf ("=== Commit(s) ===\n");
     for (; commits; commits = commits->next) {
@@ -46,15 +46,15 @@ log_result_callback (GList       *commits,
 }
 
 static void
-branch_list_result_callback (GList       *branches,
-                             const gchar *current_branch,
-                             const gchar *error,
-                             gpointer     data)
+branch_list_result_callback (GList         *branches,
+                             const gchar   *current_branch,
+                             const GError  *error,
+                             gpointer       data)
 {
   loop_pop ();
   
   if (error) {
-    g_warning ("%s", error);
+    g_warning ("%s", error->message);
   } else {
     printf ("=== Branch(es) ===\n");
     for (; branches; branches = branches->next) {

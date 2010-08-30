@@ -181,13 +181,15 @@ git_log_finish_callback (gboolean     success,
 {
   GitLogPrivate  *priv = data;
   GList          *commits = NULL;
+  GError         *error = NULL;
   
   if (! success) {
-    standard_error = "Oops, git crashed";
+    error = g_error_new_literal (GIT_WRAPPER_ERROR,
+                                 GIT_WRAPPER_ERROR_CHILD_CRASHED,
+                                 "Git crashed");
   } else if (return_value == 0) {
     const gchar *log = standard_output;
     
-    standard_error = NULL;
     while (*log) {
       GitCommit *commit;
       
@@ -204,7 +206,8 @@ git_log_finish_callback (gboolean     success,
     commits = g_list_reverse (commits);
   }
   
-  priv->callback (commits, standard_error, priv->callback_data);
+  priv->callback (commits, error, priv->callback_data);
+  if (error) g_error_free (error);
   git_commit_unref_list (commits);
   g_slice_free1 (sizeof *priv, priv);
 }
@@ -239,7 +242,8 @@ git_log (const gchar   *dir,
     /* FIXME: call this from inside the GMainLoop for the thread things to be
      * the same as a successful call.
      * Use E.g. a timeout (very short) or an idle */
-    callback (NULL, err->message, data);
+    callback (NULL, err, data);
+    g_error_free (err);
     g_slice_free1 (sizeof *priv, priv);
   }
 }
@@ -254,15 +258,14 @@ struct _GitLogSyncPrivate
 };
 
 static void
-git_log_sync_result_callback (GList       *commits,
-                              const gchar *error,
-                              gpointer     data)
+git_log_sync_result_callback (GList        *commits,
+                              const GError *error,
+                              gpointer      data)
 {
   GitLogSyncPrivate *priv = data;
   
   if (error) {
-    priv->error = g_error_new_literal (GIT_WRAPPER_ERROR,
-                                       GIT_WRAPPER_ERROR_FAILED, error);
+    priv->error = g_error_copy (error);
   } else {
     for (; commits; commits = commits->next) {
       priv->commits = g_list_prepend (priv->commits,

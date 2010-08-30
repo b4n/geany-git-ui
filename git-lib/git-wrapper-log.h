@@ -25,7 +25,7 @@ GitCommit      *git_commit_ref      (GitCommit *commit);
 void            git_commit_unref    (GitCommit *commit);
 
 typedef void (*GitLogCallback) (GList/*<GitCommit>*/ *commits,
-                                const gchar          *error,
+                                const GError         *error,
                                 gpointer              data);
 
 void            git_log             (const gchar   *dir,

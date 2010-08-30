@@ -9,7 +9,7 @@ G_BEGIN_DECLS
 
 typedef void (*GitBranchListCallback) (GList/*<gchar *>*/  *branches,
                                        const gchar         *current_branch,
-                                       const gchar         *error,
+                                       const GError        *error,
                                        gpointer             data);
 
 void            git_branch_list     (const gchar           *dir,
