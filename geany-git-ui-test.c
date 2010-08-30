@@ -88,18 +88,24 @@ git_wrapper_test_main (int     argc,
     rv = 0;
     
     {
-      GList *l;
+      GList  *l;
+      GError *err = NULL;
       
-      l = git_log_sync (dir, NULL, file, NULL);
-      printf ("=== Commit(s) ===\n");
-      while (l) {
-        GitCommit *commit = l->data;
-        GList *next = l->next;
-        
-        printf ("%.7s -- %s\n", commit->hash, commit->summary);
-        git_commit_unref (commit);
-        g_list_free_1 (l);
-        l = next;
+      l = git_log_sync (dir, NULL, file, &err);
+      if (err) {
+        g_warning ("%s", err->message);
+        g_error_free (err);
+      } else {
+        printf ("=== Commit(s) ===\n");
+        while (l) {
+          GitCommit *commit = l->data;
+          GList *next = l->next;
+          
+          printf ("%.7s -- %s\n", commit->hash, commit->summary);
+          git_commit_unref (commit);
+          g_list_free_1 (l);
+          l = next;
+        }
       }
     }
     
