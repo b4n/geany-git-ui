@@ -253,8 +253,9 @@ git_log (const gchar   *dir,
 typedef struct _GitLogSyncPrivate GitLogSyncPrivate;
 struct _GitLogSyncPrivate
 {
-  GList  *commits;
-  GError *error;
+  GList    *commits;
+  GError   *error;
+  gboolean  done;
 };
 
 static void
@@ -273,6 +274,7 @@ git_log_sync_result_callback (GList        *commits,
     }
     priv->commits = g_list_reverse (priv->commits);
   }
+  priv->done = TRUE;
 }
 
 #include <stdio.h>
@@ -294,8 +296,9 @@ git_log_sync (const gchar   *dir,
   
   priv.commits  = NULL;
   priv.error    = NULL;
+  priv.done     = FALSE;
   git_log (dir, ref, file, git_log_sync_result_callback, &priv);
-  while (! priv.commits && ! priv.error) {
+  while (! priv.done) {
     g_main_iteration (TRUE);
   }
   if (priv.error) {
