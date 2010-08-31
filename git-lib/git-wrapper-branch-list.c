@@ -4,6 +4,7 @@
 #include <glib.h>
 #include <string.h>
 
+#include "git-utils.h"
 #include "git-wrapper-private.h"
 
 
@@ -68,7 +69,7 @@ git_branch_list_finish_callback (gboolean     success,
   
   priv->callback (branches, current_branch, error, priv->callback_data);
   if (error) g_error_free (error);
-  g_list_free_full (branches, g_free);
+  git_list_free_full (branches, g_free);
   g_slice_free1 (sizeof *priv, priv);
 }
 

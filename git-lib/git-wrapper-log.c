@@ -4,6 +4,7 @@
 #include <glib.h>
 #include <string.h>
 
+#include "git-utils.h"
 #include "git-wrapper-private.h"
 
 
@@ -42,7 +43,7 @@ static void
 git_commit_unref_list (GList *commits)
 {
   #if 1
-  g_list_free_full (commits, git_commit_unref);
+  git_list_free_full (commits, git_commit_unref);
   #else
   while (commits) {
     GList *next = commits->next;
