@@ -10,67 +10,6 @@
 #include <errno.h>
 
 
-
-#define WATCH_CHILD_HACK 0
-
-#if 0 && \
-    (! defined (G_OS_WIN32)) && \
-    defined (WATCH_CHILD_HACK) && WATCH_CHILD_HACK
-
-struct _ChildWatchPrivate
-{
-  GPid pid;
-  GChildWatchFunc cb;
-  gpointer cb_data;
-};
-
-static gboolean
-child_watch_handler (gpointer data)
-{
-  struct _ChildWatchPrivate *priv = data;
-  gint      status;
-  gboolean  handled = FALSE;
-  
-  switch (waitpid ((pid_t)priv->pid, &status, WNOHANG)) {
-    case 0:
-      priv->cb (priv->pid, status, priv->cb_data);
-      handled = TRUE;
-      break;
-    
-    case -1:
-      g_critical ("waitpid() failed: %s", g_strerror (errno));
-      break;
-    
-    default: break;
-  }
-  
-  if (handled) {
-    g_free (priv);
-    return FALSE;
-  }
-  return TRUE;
-}
-
-static void
-add_child_watch (GPid pid,
-                 GChildWatchFunc cb,
-                 gpointer data)
-{
-  struct _ChildWatchPrivate *priv;
-  
-  priv = g_malloc (sizeof *priv);
-  priv->pid = pid;
-  priv->cb = cb;
-  priv->cb_data = data;
-  g_idle_add (child_watch_handler, priv);
-}
-
-#define g_child_watch_add add_child_watch
-
-#endif /* WATCH_CHILD_HACK */ 
-
-
-
 typedef struct _GitWrapperPrivate GitWrapperPrivate;
 struct _GitWrapperPrivate
 {
