@@ -3,8 +3,8 @@
 #include <string.h>
 #include <glib.h>
 
-#include "git-wrapper-log.h"
-#include "git-wrapper-branch-list.h"
+#include "ggu-git-wrapper-log.h"
+#include "ggu-git-wrapper-branch-list.h"
 
 static GMainLoop *P_loop = NULL;
 static gint       P_refs = 0;
@@ -38,7 +38,7 @@ log_result_callback (GList         *commits,
   } else {
     printf ("=== Commit(s) ===\n");
     for (; commits; commits = commits->next) {
-      GitCommit *commit = commits->data;
+      GguGitCommit *commit = commits->data;
       
       printf ("%.7s -- %s\n", commit->hash, commit->summary);
     }
@@ -67,8 +67,8 @@ branch_list_result_callback (GList         *branches,
 }
 
 static int
-git_wrapper_test_main (int     argc,
-                       char  **argv)
+ggu_git_wrapper_test_main (int     argc,
+                           char  **argv)
 {
   int rv = 1;
   
@@ -82,27 +82,27 @@ git_wrapper_test_main (int     argc,
     dir = g_path_get_dirname (path);
     file = g_path_get_basename (path);
     loop_push ();
-    git_log (dir, NULL, file, log_result_callback, NULL);
+    ggu_git_log (dir, NULL, file, log_result_callback, NULL);
     loop_push ();
-    git_branch_list (dir, branch_list_result_callback, NULL);
+    ggu_git_branch_list (dir, branch_list_result_callback, NULL);
     rv = 0;
     
     {
       GList  *l;
       GError *err = NULL;
       
-      l = git_log_sync (dir, NULL, file, &err);
+      l = ggu_git_log_sync (dir, NULL, file, &err);
       if (err) {
         g_warning ("%s", err->message);
         g_error_free (err);
       } else {
         printf ("=== Commit(s) ===\n");
         while (l) {
-          GitCommit *commit = l->data;
+          GguGitCommit *commit = l->data;
           GList *next = l->next;
           
           printf ("%.7s -- %s\n", commit->hash, commit->summary);
-          git_commit_unref (commit);
+          ggu_git_commit_unref (commit);
           g_list_free_1 (l);
           l = next;
         }
@@ -129,7 +129,7 @@ main (int     argc,
   int rv;
   
   P_loop = g_main_loop_new (NULL, FALSE);
-  rv = git_wrapper_test_main (argc, argv);
+  rv = ggu_git_wrapper_test_main (argc, argv);
   if (rv == 0 && P_loop) {
     g_main_loop_run (P_loop);
   }

@@ -1,10 +1,10 @@
 
 lib_LTLIBRARIES = libgeany-git-ui.la
 
-libgeany_git_ui_la_SOURCES = git-lib/git-wrapper-private.c \
-                             git-lib/git-wrapper-log.c \
-                             git-lib/git-wrapper-branch-list.c \
-                             git-lib/git-utils.c
+libgeany_git_ui_la_SOURCES = git-lib/ggu-git-wrapper-private.c \
+                             git-lib/ggu-git-wrapper-log.c \
+                             git-lib/ggu-git-wrapper-branch-list.c \
+                             git-lib/ggu-git-utils.c
 libgeany_git_ui_la_LIBADD  = $(AM_LIBS)
 
 # test program

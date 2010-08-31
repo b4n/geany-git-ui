@@ -1,5 +1,5 @@
 
-#include "git-wrapper-private.h"
+#include "ggu-git-wrapper-private.h"
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -10,37 +10,37 @@
 #include <errno.h>
 
 
-typedef struct _GitWrapperPrivate GitWrapperPrivate;
-struct _GitWrapperPrivate
+typedef struct _GguGitWrapperPrivate GguGitWrapperPrivate;
+struct _GguGitWrapperPrivate
 {
-  gint                ref_count;
+  gint                  ref_count;
   
-  gint                stdout;
-  GString            *stdout_str;
-  gint                stderr;
-  GString            *stderr_str;
-  guint               reader_id;
+  gint                  stdout;
+  GString              *stdout_str;
+  gint                  stderr;
+  GString              *stderr_str;
+  guint                 reader_id;
   
-  GitWrapperCallback  callback;
-  gpointer            callback_data;
+  GguGitWrapperCallback callback;
+  gpointer              callback_data;
 };
 
 GQuark
-git_wrapper_error_quark (void)
+ggu_git_wrapper_error_quark (void)
 {
   static GQuark q = 0;
   
   if (G_UNLIKELY (q == 0)) {
-    q = g_quark_from_static_string ("git-wrapper");
+    q = g_quark_from_static_string ("ggu-git-wrapper");
   }
   
   return q;
 }
 
-static GitWrapperPrivate *
-git_wrapper_private_new (void)
+static GguGitWrapperPrivate *
+ggu_git_wrapper_private_new (void)
 {
-  GitWrapperPrivate *priv;
+  GguGitWrapperPrivate *priv;
   
   priv = g_slice_alloc (sizeof *priv);
   priv->ref_count = 1;
@@ -53,15 +53,15 @@ git_wrapper_private_new (void)
   return priv;
 }
 
-static GitWrapperPrivate *
-git_wrapper_private_ref (GitWrapperPrivate *priv)
+static GguGitWrapperPrivate *
+ggu_git_wrapper_private_ref (GguGitWrapperPrivate *priv)
 {
   g_atomic_int_inc (&priv->ref_count);
   return priv;
 }
 
 static void
-git_wrapper_private_unref (GitWrapperPrivate *priv)
+ggu_git_wrapper_private_unref (GguGitWrapperPrivate *priv)
 {
   if (g_atomic_int_dec_and_test (&priv->ref_count)) {
     g_string_free (priv->stdout_str, TRUE);
@@ -85,7 +85,7 @@ fill_string_from_fd (GString *string,
 }
 
 static void
-git_wrapper_fill_fds (GitWrapperPrivate *priv)
+ggu_git_wrapper_fill_fds (GguGitWrapperPrivate *priv)
 {
   fd_set          rfds;
   /* FIXME: is waiting 0ms a portable thing not for blocking? */
@@ -109,59 +109,59 @@ git_wrapper_fill_fds (GitWrapperPrivate *priv)
 }
 
 static gboolean
-git_wrapper_read_buffers_hanlder (gpointer data)
+ggu_git_wrapper_read_buffers_hanlder (gpointer data)
 {
-  GitWrapperPrivate  *priv = git_wrapper_private_ref (data);
-  gboolean            keep;
+  GguGitWrapperPrivate *priv = ggu_git_wrapper_private_ref (data);
+  gboolean              keep;
   
   keep = priv->reader_id > 0;
   if (keep) {
-    git_wrapper_fill_fds (priv);
+    ggu_git_wrapper_fill_fds (priv);
   }
-  git_wrapper_private_unref (priv);
+  ggu_git_wrapper_private_unref (priv);
   
   return keep;
 }
 
 static void
-git_wrapper_child_watch_hanlder (GPid     pid,
-                                 gint     status,
-                                 gpointer data)
+ggu_git_wrapper_child_watch_hanlder (GPid     pid,
+                                     gint     status,
+                                     gpointer data)
 {
-  GitWrapperPrivate  *priv = data;
-  gboolean            success;
-  gchar              *output = NULL;
-  gchar              *error = NULL;
+  GguGitWrapperPrivate *priv = data;
+  gboolean              success;
+  gchar                *output = NULL;
+  gchar                *error = NULL;
   
   g_source_remove (priv->reader_id);
   priv->reader_id = 0;
   g_spawn_close_pid (pid);
   success = WIFEXITED (status);
   if (success) {
-    git_wrapper_fill_fds (priv);
+    ggu_git_wrapper_fill_fds (priv);
     output = priv->stdout_str->str;
     error = priv->stderr_str->str;
   }
   priv->callback (success, WEXITSTATUS (status), output, error,
                   priv->callback_data);
-  git_wrapper_private_unref (priv);
+  ggu_git_wrapper_private_unref (priv);
 }
 
 gboolean
-git_wrapper (const gchar         *git_dir,
-             const gchar         *command,
-             const gchar        **args,
-             GitWrapperCallback   callback,
-             gpointer             data,
-             GError             **error)
+ggu_git_wrapper (const gchar           *git_dir,
+                 const gchar           *command,
+                 const gchar          **args,
+                 GguGitWrapperCallback callback,
+                 gpointer               data,
+                 GError               **error)
 {
-  static gchar       *env[] = { NULL };
-  gchar             **argv;
-  gsize               n_args;
-  gsize               i = 0;
-  GitWrapperPrivate  *priv;
-  gboolean            success = FALSE;
-  GPid                pid;
+  static gchar         *env[] = { NULL };
+  gchar               **argv;
+  gsize                 n_args;
+  gsize                 i = 0;
+  GguGitWrapperPrivate *priv;
+  gboolean              success = FALSE;
+  GPid                  pid;
   
   n_args = (args ? g_strv_length ((gchar **)args) : 0) + 2;
   argv = g_malloc (sizeof *argv * (n_args + 1));
@@ -172,7 +172,7 @@ git_wrapper (const gchar         *git_dir,
   }
   argv[i] = NULL;
   
-  priv = git_wrapper_private_new ();
+  priv = ggu_git_wrapper_private_new ();
   priv->callback = callback;
   priv->callback_data = data;
   if (! g_spawn_async_with_pipes (git_dir, argv, env,
@@ -180,12 +180,12 @@ git_wrapper (const gchar         *git_dir,
                                   NULL, NULL, &pid, NULL,
                                   &priv->stdout, &priv->stderr, error)) {
     g_debug ("child spawn failed: %s", error ? (*error)->message : "???");
-    git_wrapper_private_unref (priv);
+    ggu_git_wrapper_private_unref (priv);
   } else {
     /* we need to read the child's pipes from time to time for the buffers not
      * to be fulfilled, and then block */
-    priv->reader_id = g_timeout_add (5, git_wrapper_read_buffers_hanlder, priv);
-    g_child_watch_add (pid, git_wrapper_child_watch_hanlder, priv);
+    priv->reader_id = g_timeout_add (5, ggu_git_wrapper_read_buffers_hanlder, priv);
+    g_child_watch_add (pid, ggu_git_wrapper_child_watch_hanlder, priv);
     success = TRUE;
   }
   

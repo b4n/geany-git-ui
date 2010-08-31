@@ -1,17 +1,17 @@
 
-#include "git-wrapper-log.h"
+#include "ggu-git-wrapper-log.h"
 
 #include <glib.h>
 #include <string.h>
 
-#include "git-utils.h"
-#include "git-wrapper-private.h"
+#include "ggu-git-utils.h"
+#include "ggu-git-wrapper-private.h"
 
 
-GitCommit *
-git_commit_new (void)
+GguGitCommit *
+ggu_git_commit_new (void)
 {
-  GitCommit *commit;
+  GguGitCommit *commit;
   
   commit = g_slice_alloc0 (sizeof *commit);
   commit->ref_count = 1;
@@ -19,15 +19,15 @@ git_commit_new (void)
   return commit;
 }
 
-GitCommit *
-git_commit_ref (GitCommit *commit)
+GguGitCommit *
+ggu_git_commit_ref (GguGitCommit *commit)
 {
   g_atomic_int_inc (&commit->ref_count);
   return commit;
 }
 
 void
-git_commit_unref (GitCommit *commit)
+ggu_git_commit_unref (GguGitCommit *commit)
 {
   if (g_atomic_int_dec_and_test (&commit->ref_count)) {
     g_free (commit->hash);
@@ -40,10 +40,10 @@ git_commit_unref (GitCommit *commit)
 }
 
 static void
-git_commit_unref_list (GList *commits)
+ggu_git_commit_unref_list (GList *commits)
 {
   #if 1
-  git_list_free_full (commits, git_commit_unref);
+  ggu_git_list_free_full (commits, ggu_git_commit_unref);
   #else
   while (commits) {
     GList *next = commits->next;
@@ -57,10 +57,10 @@ git_commit_unref_list (GList *commits)
 
 /* FIXME: this is ugly... */
 static gboolean
-git_commit_parse_from_log (GitCommit     *commit,
-                           const gchar   *log,
-                           const gchar  **entry_end,
-                           GError       **error)
+ggu_git_commit_parse_from_log (GguGitCommit  *commit,
+                               const gchar   *log,
+                               const gchar  **entry_end,
+                               GError       **error)
 {
   const gchar  *endptr;
   gsize         len;
@@ -166,40 +166,41 @@ git_commit_parse_from_log (GitCommit     *commit,
 }
 
 
-typedef struct _GitLogPrivate GitLogPrivate;
-struct _GitLogPrivate
+typedef struct _GguGitLogPrivate GguGitLogPrivate;
+struct _GguGitLogPrivate
 {
-  GitLogCallback  callback;
-  gpointer        callback_data;
+  GguGitLogCallback callback;
+  gpointer          callback_data;
 };
 
 static void
-git_log_finish_callback (gboolean     success,
-                         gint         return_value,
-                         const gchar *standard_output,
-                         const gchar *standard_error,
-                         gpointer     data)
+ggu_git_log_finish_callback (gboolean     success,
+                             gint         return_value,
+                             const gchar *standard_output,
+                             const gchar *standard_error,
+                             gpointer     data)
 {
-  GitLogPrivate  *priv = data;
-  GList          *commits = NULL;
-  GError         *error = NULL;
+  GguGitLogPrivate *priv = data;
+  GList            *commits = NULL;
+  GError           *error = NULL;
   
   if (! success) {
-    error = g_error_new_literal (GIT_WRAPPER_ERROR,
-                                 GIT_WRAPPER_ERROR_CHILD_CRASHED,
+    error = g_error_new_literal (GGU_GIT_WRAPPER_ERROR,
+                                 GGU_GIT_WRAPPER_ERROR_CHILD_CRASHED,
                                  "Git crashed");
   } else if (return_value != 0) {
-    error = g_error_new (GIT_WRAPPER_ERROR, GIT_WRAPPER_ERROR_FAILED,
+    error = g_error_new (GGU_GIT_WRAPPER_ERROR, GGU_GIT_WRAPPER_ERROR_FAILED,
                          "Git failed: %s", standard_error);
   } else {
     const gchar *log = standard_output;
     
     while (*log) {
-      GitCommit *commit;
+      GguGitCommit *commit;
       
-      commit = git_commit_new ();
-      if (! git_commit_parse_from_log (commit, log, &log, NULL)) {
-        git_commit_unref (commit);
+      commit = ggu_git_commit_new ();
+      if (! ggu_git_commit_parse_from_log (commit, log, &log, NULL)) {
+        ggu_git_commit_unref (commit);
+        /* FIXME: */
         g_warning ("Dropped a commit");
         break;
       } else {
@@ -212,21 +213,21 @@ git_log_finish_callback (gboolean     success,
   
   priv->callback (commits, error, priv->callback_data);
   if (error) g_error_free (error);
-  git_commit_unref_list (commits);
+  ggu_git_commit_unref_list (commits);
   g_slice_free1 (sizeof *priv, priv);
 }
 
 void
-git_log (const gchar   *dir,
-         const gchar   *ref,
-         const gchar   *file,
-         GitLogCallback callback,
-         gpointer       data)
+ggu_git_log (const gchar       *dir,
+             const gchar       *ref,
+             const gchar       *file,
+             GguGitLogCallback  callback,
+             gpointer           data)
 {
   static const gchar *args[4]; /* ref, --, file, null */
   GError             *err = NULL;
   gsize               i = 0;
-  GitLogPrivate      *priv;
+  GguGitLogPrivate   *priv;
   
   /* support to log on no real branch, in which case we long on current state */
   if (ref && strcmp (ref, "(no branch)") != 0) {
@@ -242,7 +243,8 @@ git_log (const gchar   *dir,
   priv->callback = callback;
   priv->callback_data = data;
   
-  if (! git_wrapper (dir, "log", args, git_log_finish_callback, priv, &err)) {
+  if (! ggu_git_wrapper (dir, "log", args,
+                         ggu_git_log_finish_callback, priv, &err)) {
     /* FIXME: call this from inside the GMainLoop for the thread things to be
      * the same as a successful call.
      * Use E.g. a timeout (very short) or an idle */
@@ -254,8 +256,8 @@ git_log (const gchar   *dir,
 
 
 /* fake synchronous version */
-typedef struct _GitLogSyncPrivate GitLogSyncPrivate;
-struct _GitLogSyncPrivate
+typedef struct _GguGitLogSyncPrivate GguGitLogSyncPrivate;
+struct _GguGitLogSyncPrivate
 {
   GList    *commits;
   GError   *error;
@@ -263,18 +265,18 @@ struct _GitLogSyncPrivate
 };
 
 static void
-git_log_sync_result_callback (GList        *commits,
-                              const GError *error,
-                              gpointer      data)
+ggu_git_log_sync_result_callback (GList        *commits,
+                                  const GError *error,
+                                  gpointer      data)
 {
-  GitLogSyncPrivate *priv = data;
+  GguGitLogSyncPrivate *priv = data;
   
   if (error) {
     priv->error = g_error_copy (error);
   } else {
     for (; commits; commits = commits->next) {
       priv->commits = g_list_prepend (priv->commits,
-                                      git_commit_ref (commits->data));
+                                      ggu_git_commit_ref (commits->data));
     }
     priv->commits = g_list_reverse (priv->commits);
   }
@@ -290,18 +292,18 @@ git_log_sync_result_callback (GList        *commits,
  * For example, a side effect is that even if for the direct caller it looks
  * like a synchronous version, some IDLE or timout callbacks may have run
  * meanwhile. */
-GList/*<GitCommit>*/ *
-git_log_sync (const gchar   *dir,
-              const gchar   *ref,
-              const gchar   *file,
-              GError       **error)
+GList/*<GguGitCommit>*/ *
+ggu_git_log_sync (const gchar   *dir,
+                  const gchar   *ref,
+                  const gchar   *file,
+                  GError       **error)
 {
-  GitLogSyncPrivate priv;
+  GguGitLogSyncPrivate priv;
   
   priv.commits  = NULL;
   priv.error    = NULL;
   priv.done     = FALSE;
-  git_log (dir, ref, file, git_log_sync_result_callback, &priv);
+  ggu_git_log (dir, ref, file, ggu_git_log_sync_result_callback, &priv);
   while (! priv.done) {
     g_main_iteration (TRUE);
   }
