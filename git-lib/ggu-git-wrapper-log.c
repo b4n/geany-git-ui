@@ -43,7 +43,7 @@ static void
 ggu_git_commit_unref_list (GList *commits)
 {
   #if 1
-  ggu_git_list_free_full (commits, ggu_git_commit_unref);
+  ggu_git_list_free_full (commits, (GFreeFunc)ggu_git_commit_unref);
   #else
   while (commits) {
     GList *next = commits->next;
@@ -54,6 +54,14 @@ ggu_git_commit_unref_list (GList *commits)
   }
   #endif
 }
+
+
+/* checks if the litteral @h_l is at the start of @buf, and if so, moves the
+ * start of @buf after that header */
+#define HEADER_CHECK_AND_SKIP(buf, h_l)             \
+  ((strncmp ((buf), (h_l), sizeof (h_l) - 1) == 0)  \
+    ? (((buf) += sizeof (h_l) - 1), TRUE)           \
+    : FALSE)
 
 /* FIXME: this is ugly... */
 static gboolean
@@ -66,11 +74,16 @@ ggu_git_commit_parse_from_log (GguGitCommit  *commit,
   gsize         len;
   GString      *sb;
   
-  if (strncmp (log, "commit ", 7) != 0) {
-    g_warning ("Failed to read commit header, we have '%.16s...'", log);
-    goto failure;
+  #define FAIL(msg) G_STMT_START {                                             \
+    g_set_error (error, GGU_GIT_WRAPPER_ERROR,                                 \
+                 GGU_GIT_WRAPPER_ERROR_INVALID_RESULT,                         \
+                 "%s (data is \"%.16s...\")", msg, log);                       \
+    goto failure;                                                              \
+  } G_STMT_END
+  
+  if (! HEADER_CHECK_AND_SKIP (log, "commit ")) {
+    FAIL ("Failed to read commit header");
   }
-  log += 7;
   #if 0
   commit->hash = g_ascii_strtoull (log, &endptr, 16);
   #else
@@ -78,57 +91,43 @@ ggu_git_commit_parse_from_log (GguGitCommit  *commit,
   endptr = log + 40;
   #endif
   if (endptr == log || *endptr != '\n') {
-    g_warning ("Failed to read commit hash");
-    goto failure;
+    FAIL ("Failed to read commit hash");
   }
   log = endptr + 1;
   
   /* skip merges */
-  if (strncmp (log, "Merge: ", 7) == 0) {
-    /*g_debug ("got a merge!");*/
-    while (*log && *log != '\n') {
-      log++;
-    }
-    if (*log)
-      log++;
+  if (HEADER_CHECK_AND_SKIP (log, "Merge: ")) {
+    while (*log && *log++ != '\n');
   }
   
-  if (strncmp (log, "Author: ", 8) != 0) {
-    g_warning ("Failed to read author header, we have '%.16s'", log);
-    goto failure;
+  if (! HEADER_CHECK_AND_SKIP (log, "Author: ")) {
+    FAIL ("Failed to read author header");
   }
-  log += 8;
   for (len = 0; log[len] && log[len] != '\n'; len ++);
   if (len < 1) {
-    g_warning ("Failed to read author name");
-    goto failure;
+    FAIL ("Failed to read author name");
   }
   commit->author = g_strndup (log, len);
   log += len + 1;
   
-  if (strncmp (log, "Date:   ", 8) != 0) {
-    g_warning ("Failed to read date header");
-    goto failure;
+  if (! HEADER_CHECK_AND_SKIP (log, "Date:   ")) {
+    FAIL ("Failed to read date header");
   }
-  log += 8;
   for (len = 0; log[len] && log[len] != '\n'; len ++);
   if (len < 29 || len > 30 || log[len] != '\n') {
-    g_warning ("Failed to read date");
-    goto failure;
+    FAIL (("Failed to read date"));
   }
   commit->date = g_strndup (log, len);
   log += len + 1;
   
   if (*log != '\n') {
-    g_warning ("Missing separator before commit message");
-    goto failure;
+    FAIL ("Missing separator before commit message");
   }
   log ++;
   
   sb = g_string_new (NULL);
-  while (*log != 0 && *log != '\n') {
-    while (*log == ' ')
-      log ++;
+  while (*log && *log != '\n') {
+    while (*log == ' ') log++;
     while (*log && *log != '\n') {
       g_string_append_c (sb, *log);
       log ++;
@@ -151,7 +150,8 @@ ggu_git_commit_parse_from_log (GguGitCommit  *commit,
     log ++;
   }
   
-  goto success;
+  *entry_end = log;
+  return TRUE;
   
  failure:
   g_free (commit->hash); commit->hash = NULL;
@@ -160,9 +160,6 @@ ggu_git_commit_parse_from_log (GguGitCommit  *commit,
   g_free (commit->summary); commit->summary = NULL;
   g_free (commit->details); commit->details = NULL;
   return FALSE;
- success:
-  *entry_end = log;
-  return TRUE;
 }
 
 
@@ -198,17 +195,19 @@ ggu_git_log_finish_callback (gboolean     success,
       GguGitCommit *commit;
       
       commit = ggu_git_commit_new ();
-      if (! ggu_git_commit_parse_from_log (commit, log, &log, NULL)) {
+      if (! ggu_git_commit_parse_from_log (commit, log, &log, &error)) {
         ggu_git_commit_unref (commit);
-        /* FIXME: */
-        g_warning ("Dropped a commit");
         break;
       } else {
         commits = g_list_prepend (commits, commit);
       }
     }
-    /* reverse list order */
-    commits = g_list_reverse (commits);
+    if (error) {
+      ggu_git_commit_unref_list (commits);
+    } else {
+      /* reverse list order */
+      commits = g_list_reverse (commits);
+    }
   }
   
   priv->callback (commits, error, priv->callback_data);
