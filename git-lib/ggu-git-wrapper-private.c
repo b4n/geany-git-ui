@@ -2,24 +2,26 @@
 #include "ggu-git-wrapper-private.h"
 
 #include <sys/types.h>
-#include <sys/time.h>
 #include <sys/wait.h>
-#include <unistd.h>
-#include <stdio.h>
+#include <stdio.h> /* For BUFSIZ */
 #include <glib.h>
-#include <errno.h>
 
+
+typedef struct _IoSource IoSource;
+struct _IoSource
+{
+  GIOChannel   *channel;
+  guint         source_id;
+  GString      *str;
+};
 
 typedef struct _GguGitWrapperPrivate GguGitWrapperPrivate;
 struct _GguGitWrapperPrivate
 {
   gint                  ref_count;
   
-  gint                  stdout;
-  GString              *stdout_str;
-  gint                  stderr;
-  GString              *stderr_str;
-  guint                 reader_id;
+  IoSource              stdout;
+  IoSource              stderr;
   
   GguGitWrapperCallback callback;
   gpointer              callback_data;
@@ -44,11 +46,12 @@ ggu_git_wrapper_private_new (void)
   
   priv = g_slice_alloc (sizeof *priv);
   priv->ref_count = 1;
-  priv->stdout = -1;
-  priv->stdout_str = g_string_new (NULL);
-  priv->stderr = -1;
-  priv->stderr_str = g_string_new (NULL);
-  priv->reader_id = 0;
+  priv->stdout.channel = NULL;
+  priv->stdout.source_id = 0;
+  priv->stdout.str = g_string_new (NULL);
+  priv->stderr.channel = NULL;
+  priv->stderr.source_id = 0;
+  priv->stderr.str = g_string_new (NULL);
   
   return priv;
 }
@@ -64,63 +67,60 @@ static void
 ggu_git_wrapper_private_unref (GguGitWrapperPrivate *priv)
 {
   if (g_atomic_int_dec_and_test (&priv->ref_count)) {
-    g_string_free (priv->stdout_str, TRUE);
-    g_string_free (priv->stderr_str, TRUE);
+    if (priv->stdout.source_id) g_source_remove (priv->stdout.source_id);
+    g_string_free (priv->stdout.str, TRUE);
+    if (priv->stderr.source_id) g_source_remove (priv->stderr.source_id);
+    g_string_free (priv->stderr.str, TRUE);
     g_slice_free1 (sizeof *priv, priv);
   }
 }
 
 static gboolean
-fill_string_from_fd (GString *string,
-                     gint     fd)
+ggu_git_wrapper_io_watch_handler (GIOChannel   *channel,
+                                  GIOCondition  cond,
+                                  gpointer      data)
 {
-  gchar   buf[BUFSIZ];
-  gssize  n_read;
+  IoSource *io = data;
   
-  while ((n_read = read (fd, buf, sizeof (buf))) > 0) {
-    g_string_append_len (string, buf, n_read);
-  }
-  
-  return n_read >= 0;
-}
-
-static void
-ggu_git_wrapper_fill_fds (GguGitWrapperPrivate *priv)
-{
-  fd_set          rfds;
-  /* FIXME: is waiting 0ms a portable thing not for blocking? */
-  struct timeval  tv = {0, 0};
-  gint            rv;
-  
-  FD_ZERO (&rfds);
-  FD_SET (priv->stdout, &rfds);
-  FD_SET (priv->stderr, &rfds);
-  rv = select (MAX (priv->stderr, priv->stdout) + 1, &rfds, NULL, NULL, &tv);
-  if (rv < 0 && errno != EINTR) {
-    g_warning ("select() failed: %s", g_strerror (errno));
-  } else {
-    if (FD_ISSET (priv->stdout, &rfds)) {
-      fill_string_from_fd (priv->stdout_str, priv->stdout);
+  switch (cond) {
+    case G_IO_IN:
+    case G_IO_PRI: {
+      gsize n_read;
+      
+      do {
+        gchar   buf[BUFSIZ];
+        GError *err = NULL;
+        
+        n_read = 0;
+        switch (g_io_channel_read_chars (channel, buf, sizeof (buf), &n_read,
+                                         &err)) {
+          case G_IO_STATUS_ERROR:
+            g_warning ("Read failed: %s", err->message);
+            /* Fallthrough */
+          case G_IO_STATUS_EOF:
+            io->channel = NULL;
+            io->source_id = 0;
+            break;
+          
+          case G_IO_STATUS_NORMAL:
+            g_string_append_len (io->str, buf, (gssize)n_read);
+            break;
+          
+          case G_IO_STATUS_AGAIN:
+            continue;
+        }
+      } while (n_read > 0);
+      break;
     }
-    if (FD_ISSET (priv->stderr, &rfds)) {
-      fill_string_from_fd (priv->stderr_str, priv->stderr);
-    }
+    
+    case G_IO_ERR:
+      g_warning ("IO channel error");
+      break;
+    
+    default:;
   }
-}
-
-static gboolean
-ggu_git_wrapper_read_buffers_hanlder (gpointer data)
-{
-  GguGitWrapperPrivate *priv = ggu_git_wrapper_private_ref (data);
-  gboolean              keep;
   
-  keep = priv->reader_id > 0;
-  if (keep) {
-    ggu_git_wrapper_fill_fds (priv);
-  }
-  ggu_git_wrapper_private_unref (priv);
-  
-  return keep;
+  return io->channel != NULL;
 }
 
 static void
@@ -133,14 +133,11 @@ ggu_git_wrapper_child_watch_hanlder (GPid     pid,
   gchar                *output = NULL;
   gchar                *error = NULL;
   
-  g_source_remove (priv->reader_id);
-  priv->reader_id = 0;
   g_spawn_close_pid (pid);
   success = WIFEXITED (status);
   if (success) {
-    ggu_git_wrapper_fill_fds (priv);
-    output = priv->stdout_str->str;
-    error = priv->stderr_str->str;
+    output = priv->stdout.str->str;
+    error = priv->stderr.str->str;
   }
   priv->callback (success, WEXITSTATUS (status), output, error,
                   priv->callback_data);
@@ -162,6 +159,8 @@ ggu_git_wrapper (const gchar           *git_dir,
   GguGitWrapperPrivate *priv;
   gboolean              success = FALSE;
   GPid                  pid;
+  gint                  stdout_fd;
+  gint                  stderr_fd;
   
   n_args = (args ? g_strv_length ((gchar **)args) : 0) + 2;
   argv = g_malloc (sizeof *argv * (n_args + 1));
@@ -178,13 +177,22 @@ ggu_git_wrapper (const gchar           *git_dir,
   if (! g_spawn_async_with_pipes (git_dir, argv, env,
                                   G_SPAWN_SEARCH_PATH|G_SPAWN_DO_NOT_REAP_CHILD,
                                   NULL, NULL, &pid, NULL,
-                                  &priv->stdout, &priv->stderr, error)) {
+                                  &stdout_fd, &stderr_fd, error)) {
     g_debug ("child spawn failed: %s", error ? (*error)->message : "???");
     ggu_git_wrapper_private_unref (priv);
   } else {
     /* we need to read the child's pipes from time to time for the buffers not
      * to be fulfilled, and then block */
-    priv->reader_id = g_timeout_add (5, ggu_git_wrapper_read_buffers_hanlder, priv);
+    #define ADD_WATCH(io, fd) \
+      ((io)->channel = g_io_channel_unix_new ((fd)),                           \
+       g_io_channel_set_encoding ((io)->channel, NULL, NULL),                  \
+       (io)->source_id = g_io_add_watch ((io)->channel, G_IO_IN | G_IO_PRI,    \
+                                         ggu_git_wrapper_io_watch_handler, io),\
+       g_io_channel_unref ((io)->channel),                                     \
+       (io)->source_id)
+    
+    ADD_WATCH (&priv->stdout, stdout_fd);
+    ADD_WATCH (&priv->stderr, stderr_fd);
     g_child_watch_add (pid, ggu_git_wrapper_child_watch_hanlder, priv);
     success = TRUE;
   }
