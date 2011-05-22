@@ -55,111 +55,81 @@ ggu_git_commit_unref_list (GList *commits)
   #endif
 }
 
-
-/* checks if the litteral @h_l is at the start of @buf, and if so, moves the
- * start of @buf after that header */
-#define HEADER_CHECK_AND_SKIP(buf, h_l)             \
-  ((strncmp ((buf), (h_l), sizeof (h_l) - 1) == 0)  \
-    ? (((buf) += sizeof (h_l) - 1), TRUE)           \
-    : FALSE)
-
-/* FIXME: this is ugly... */
 static gboolean
-ggu_git_commit_parse_from_log (GguGitCommit  *commit,
-                               const gchar   *log,
-                               const gchar  **entry_end,
-                               GError       **error)
+is_git_hash (const gchar *hash)
 {
-  const gchar  *endptr;
-  gsize         len;
-  GString      *sb;
+  guint i;
   
-  #define FAIL(msg) G_STMT_START {                                             \
-    g_set_error (error, GGU_GIT_WRAPPER_ERROR,                                 \
-                 GGU_GIT_WRAPPER_ERROR_INVALID_RESULT,                         \
-                 "%s (data is \"%.16s...\")", msg, log);                       \
-    goto failure;                                                              \
-  } G_STMT_END
-  
-  if (! HEADER_CHECK_AND_SKIP (log, "commit ")) {
-    FAIL ("Failed to read commit header");
-  }
-  #if 0
-  commit->hash = g_ascii_strtoull (log, &endptr, 16);
-  #else
-  commit->hash = g_strndup (log, 40);
-  endptr = log + 40;
-  #endif
-  if (endptr == log || *endptr != '\n') {
-    FAIL ("Failed to read commit hash");
-  }
-  log = endptr + 1;
-  
-  /* skip merges */
-  if (HEADER_CHECK_AND_SKIP (log, "Merge: ")) {
-    while (*log && *log++ != '\n');
-  }
-  
-  if (! HEADER_CHECK_AND_SKIP (log, "Author: ")) {
-    FAIL ("Failed to read author header");
-  }
-  for (len = 0; log[len] && log[len] != '\n'; len ++);
-  if (len < 1) {
-    FAIL ("Failed to read author name");
-  }
-  commit->author = g_strndup (log, len);
-  log += len + 1;
-  
-  if (! HEADER_CHECK_AND_SKIP (log, "Date:   ")) {
-    FAIL ("Failed to read date header");
-  }
-  for (len = 0; log[len] && log[len] != '\n'; len ++);
-  if (len < 29 || len > 30 || log[len] != '\n') {
-    FAIL (("Failed to read date"));
-  }
-  commit->date = g_strndup (log, len);
-  log += len + 1;
-  
-  if (*log != '\n') {
-    FAIL ("Missing separator before commit message");
-  }
-  log ++;
-  
-  sb = g_string_new (NULL);
-  while (*log && *log != '\n') {
-    while (*log == ' ') log++;
-    while (*log && *log != '\n') {
-      g_string_append_c (sb, *log);
-      log ++;
-    }
-    if (*log) {
-      g_string_append_c (sb, *log);
-      log ++;
+  for (i = 0; hash[i]; i++) {
+    if (! g_ascii_isxdigit (hash[i])) {
+      return FALSE;
     }
   }
-  if (sb->len > 0 && sb->str[sb->len - 1] == '\n') {
-    sb->str[--sb->len] = 0;
+  
+  return i == 40;
+}
+
+static gchar *
+parse_message (const gchar *msg)
+{
+  GString  *builder;
+  gboolean  prev_newline = FALSE;
+  
+  builder = g_string_new (NULL);
+  for (; *msg; msg++) {
+    if (! prev_newline && *msg == '\n' && g_ascii_isalnum (msg[1])) {
+      /* transform this newline by a space */
+      g_string_append_c (builder, ' ');
+    } else {
+      g_string_append_c (builder, *msg);
+    }
+    prev_newline = *msg == '\n';
   }
-  commit->details = g_string_free (sb, FALSE);
   
-  for (len = 0; commit->details[len] && commit->details[len] != '\n'; len++);
-  commit->summary = g_strndup (commit->details, len);
+  return g_string_free (builder, FALSE);
+}
+
+static GList/*<GguGitCommit *>*/ *
+parse_log (const gchar   *log,
+           GError       **error)
+{
+  gchar **chunks;
+  gsize   i = 0;
+  GList  *commits = NULL;
   
-  /* skip post-message separator */
-  if (*log == '\n') {
-    log ++;
+  chunks = g_strsplit (log, "\xff", -1);
+  for (i = 0; chunks[i] && (chunks[i][0] != '\n' || chunks[i][1]); i += 5) {
+    GguGitCommit *commit;
+    
+    if (! chunks[i+1] || ! chunks[i+2] || ! chunks[i+3] || ! chunks[i+4]) {
+      g_set_error (error, GGU_GIT_WRAPPER_ERROR,
+                   GGU_GIT_WRAPPER_ERROR_INVALID_RESULT,
+                   "Incomplete output");
+      break;
+    }
+    /* there is a leading \n after each entry, then before each hash that is
+     * not the first one */
+    g_strchug (chunks[i]);
+    if (! is_git_hash (chunks[i])) {
+      g_set_error (error, GGU_GIT_WRAPPER_ERROR,
+                   GGU_GIT_WRAPPER_ERROR_INVALID_RESULT,
+                   "Corrupted output: don't start with a hash");
+      break;
+    }
+    
+    commit = ggu_git_commit_new ();
+    commit->hash    = g_strdup (chunks[i+0]);
+    commit->date    = g_strdup (chunks[i+1]);
+    commit->author  = g_strdup (chunks[i+2]);
+    commit->summary = g_strdup (chunks[i+3]);
+    /* FIXME: parse chunks[i+4] to not have useless \n */
+    commit->details = parse_message (chunks[i+4]);
+    
+    commits = g_list_prepend (commits, commit);
   }
+  g_strfreev (chunks);
   
-  *entry_end = log;
-  return TRUE;
-  
- failure:
-  g_free (commit->hash); commit->hash = NULL;
-  g_free (commit->date); commit->date = NULL;
-  g_free (commit->author); commit->author = NULL;
-  g_free (commit->summary); commit->summary = NULL;
-  g_free (commit->details); commit->details = NULL;
-  return FALSE;
+  return commits;
 }
 
 
@@ -189,21 +159,10 @@ ggu_git_log_finish_callback (gboolean     success,
     error = g_error_new (GGU_GIT_WRAPPER_ERROR, GGU_GIT_WRAPPER_ERROR_FAILED,
                          "Git failed: %s", standard_error);
   } else {
-    const gchar *log = standard_output;
-    
-    while (*log) {
-      GguGitCommit *commit;
-      
-      commit = ggu_git_commit_new ();
-      if (! ggu_git_commit_parse_from_log (commit, log, &log, &error)) {
-        ggu_git_commit_unref (commit);
-        break;
-      } else {
-        commits = g_list_prepend (commits, commit);
-      }
-    }
+    commits = parse_log (standard_output, &error);
     if (error) {
       ggu_git_commit_unref_list (commits);
+      commits = NULL;
     } else {
       /* reverse list order */
       commits = g_list_reverse (commits);
@@ -223,11 +182,17 @@ ggu_git_log (const gchar       *dir,
              GguGitLogCallback  callback,
              gpointer           data)
 {
-  static const gchar *args[4]; /* ref, --, file, null */
+  static const gchar *args[5]; /* --format=format, ref, --, file, null */
   GError             *err = NULL;
   gsize               i = 0;
   GguGitLogPrivate   *priv;
   
+  args[i++] = "--format="
+              "%H%xff"
+              "%aD%xff"
+              "%an <%ae>%xff"
+              "%s%xff"
+              "%B%xff";
   /* support to log on no real branch, in which case we long on current state */
   if (ref && strcmp (ref, "(no branch)") != 0) {
     args[i++] = ref;
