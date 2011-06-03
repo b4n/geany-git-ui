@@ -27,6 +27,8 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "ggu-wrap-label.h"
+
 
 struct _GguMessageInfoPrivate
 {
@@ -146,7 +148,7 @@ ggu_message_info_init (GguMessageInfo *self)
                                             "ellipsize", PANGO_ELLIPSIZE_END,
                                             "xalign", 0.0,
                                             NULL);
-  self->priv->secondary_label = gtk_label_new (NULL);
+  self->priv->secondary_label = ggu_wrap_label_new (NULL);
   
   box = gtk_hbox_new (FALSE, 6);
   label_box = gtk_vbox_new (FALSE, 12);

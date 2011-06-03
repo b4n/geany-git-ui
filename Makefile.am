@@ -25,7 +25,9 @@ ggu_plugin_sources  = src/ggu-message-box.c \
                       src/ggu-panel.c \
                       src/ggu-panel.h \
                       src/ggu-plugin.c \
-                      src/ggu-plugin.h
+                      src/ggu-plugin.h \
+                      src/ggu-wrap-label.c \
+                      src/ggu-wrap-label.h
 
 libgeany_git_ui_la_SOURCES = $(ggu_compat_sources) \
                              $(ggu_git_lib_sources) \
