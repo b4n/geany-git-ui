@@ -24,6 +24,8 @@
 #include <glib.h>
 #include <glib-object.h>
 
+#include "ggu-glib-compat.h"
+
 
 G_DEFINE_BOXED_TYPE (GguGitLogEntry,
                      ggu_git_log_entry,

@@ -1,6 +1,8 @@
 
 lib_LTLIBRARIES = libgeany-git-ui.la
 
+ggu_compat_sources  = compat/ggu-glib-compat.h
+
 ggu_git_lib_sources = git-lib/ggu-git.c \
                       git-lib/ggu-git.h \
                       git-lib/ggu-git-branch.c \
@@ -16,7 +18,8 @@ ggu_git_lib_sources = git-lib/ggu-git.c \
                       git-lib/ggu-git-version.c \
                       git-lib/ggu-git-version.h
 
-libgeany_git_ui_la_SOURCES = $(ggu_git_lib_sources)
+libgeany_git_ui_la_SOURCES = $(ggu_compat_sources) \
+                             $(ggu_git_lib_sources)
 libgeany_git_ui_la_LIBADD  = $(AM_LIBS)
 
 # test program
@@ -28,5 +31,5 @@ libgeany_git_ui_la_LIBADD  = $(AM_LIBS)
 
 
 ACLOCAL_AMFLAGS = -I build/m4
-AM_CFLAGS       = $(GLIB_CFLAGS) -Igit-lib/
+AM_CFLAGS       = $(GLIB_CFLAGS) -Igit-lib/ -Icompat/
 AM_LIBS         = $(GLIB_LIBS)

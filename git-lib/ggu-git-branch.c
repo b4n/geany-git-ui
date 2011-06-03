@@ -26,6 +26,7 @@
 #include <glib-object.h>
 #include <gio/gio.h>
 
+#include "ggu-glib-compat.h"
 #include "ggu-git.h"
 
 

@@ -27,6 +27,8 @@
 #include <glib-object.h>
 #include <gio/gio.h>
 
+#include "ggu-glib-compat.h"
+
 
 GQuark
 ggu_git_error_quark (void)
