@@ -18,7 +18,9 @@ AC_PROG_CC
 AC_PROG_CC_C_O
 
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.16
-                           gio-2.0])
+                           gio-2.0
+                           gtk+-2.0 >= 2.20
+                           geany >= 0.21])
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

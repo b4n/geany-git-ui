@@ -18,8 +18,18 @@ ggu_git_lib_sources = git-lib/ggu-git.c \
                       git-lib/ggu-git-version.c \
                       git-lib/ggu-git-version.h
 
+ggu_plugin_sources  = src/ggu-message-box.c \
+                      src/ggu-message-box.h \
+                      src/ggu-message-info.c \
+                      src/ggu-message-info.h \
+                      src/ggu-panel.c \
+                      src/ggu-panel.h \
+                      src/ggu-plugin.c \
+                      src/ggu-plugin.h
+
 libgeany_git_ui_la_SOURCES = $(ggu_compat_sources) \
-                             $(ggu_git_lib_sources)
+                             $(ggu_git_lib_sources) \
+                             $(ggu_plugin_sources)
 libgeany_git_ui_la_LIBADD  = $(AM_LIBS)
 
 # test program
