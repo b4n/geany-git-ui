@@ -17,7 +17,8 @@ LT_INIT([disable-static])
 AC_PROG_CC
 AC_PROG_CC_C_O
 
-PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.10])
+PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.28
+                           gio-2.0 >= 2.28])
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

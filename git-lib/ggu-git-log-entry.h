@@ -19,17 +19,36 @@
  * 
  */
 
-#include <glib.h>
+#ifndef H_GGU_GIT_LOG_ENTRY
+#define H_GGU_GIT_LOG_ENTRY
 
-#ifndef H_GGU_GIT_UTILS
-#define H_GGU_GIT_UTILS
+#include <glib.h>
+#include <glib-object.h>
 
 G_BEGIN_DECLS
 
 
-gboolean  ggu_git_parse_path        (const gchar *path,
-                                     gchar      **root_,
-                                     gchar      **inner_path_);
+#define GGU_TYPE_GIT_LOG_ENTRY (ggu_git_log_entry_get_type ())
+
+
+typedef struct _GguGitLogEntry GguGitLogEntry;
+struct _GguGitLogEntry
+{
+  gint      ref_count;
+  
+  /*guint64   hash;*/
+  gchar    *hash;
+  gchar    *date; /* TODO: use a date repsentation? */
+  gchar    *author;
+  gchar    *summary;
+  gchar    *details;
+};
+
+
+GType             ggu_git_log_entry_get_type  (void) G_GNUC_CONST;
+GguGitLogEntry   *ggu_git_log_entry_new       (void);
+GguGitLogEntry   *ggu_git_log_entry_ref       (GguGitLogEntry *entry);
+void              ggu_git_log_entry_unref     (GguGitLogEntry *entry);
 
 
 G_END_DECLS
