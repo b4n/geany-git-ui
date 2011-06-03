@@ -18,7 +18,9 @@ ggu_git_lib_sources = git-lib/ggu-git.c \
                       git-lib/ggu-git-version.c \
                       git-lib/ggu-git-version.h
 
-ggu_plugin_sources  = src/ggu-message-box.c \
+ggu_plugin_sources  = src/ggu-auto-link-label.c \
+                      src/ggu-auto-link-label.h \
+                      src/ggu-message-box.c \
                       src/ggu-message-box.h \
                       src/ggu-message-info.c \
                       src/ggu-message-info.h \

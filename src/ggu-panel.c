@@ -32,6 +32,7 @@
 #include "git-lib/ggu-git-log-entry.h"
 #include "git-lib/ggu-git-branch.h"
 #include "git-lib/ggu-git-show.h"
+#include "ggu-auto-link-label.h"
 #include "ggu-message-box.h"
 #include "ggu-message-info.h"
 
@@ -370,7 +371,7 @@ ggu_panel_init (GguPanel *self)
   label = create_small_title_label (_("author:"));
   gtk_table_attach (GTK_TABLE (table), label, 0, 1, 2, 3,
                     GTK_FILL, GTK_FILL, 0, 0);
-  self->priv->commit_author = create_small_label (GTK_TYPE_LABEL, NULL);
+  self->priv->commit_author = create_small_label (GGU_TYPE_AUTO_LINK_LABEL, NULL);
   gtk_table_attach (GTK_TABLE (table), self->priv->commit_author, 1, 2, 2, 3,
                     GTK_FILL | GTK_EXPAND, GTK_FILL, 0, 0);
   
