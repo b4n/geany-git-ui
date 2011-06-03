@@ -52,6 +52,8 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "ggu-fade-out-widget.h"
+
 
 struct _GguMessageBoxPrivate
 {
@@ -236,11 +238,57 @@ ggu_message_box_release_child (GguMessageBox *self,
 }
 
 static void
-ggu_message_box_remove (GtkContainer *container,
-                        GtkWidget    *child)
+ggu_message_box_real_remove (GtkContainer *container,
+                             GtkWidget    *child)
 {
   ggu_message_box_release_child (GGU_MESSAGE_BOX (container), child);
   GTK_CONTAINER_CLASS (ggu_message_box_parent_class)->remove (container, child);
+}
+
+/* A bit hackish, finds the position of a child widget.
+ * This supposes children are packed at the end. */
+static gint
+get_child_position (GtkContainer *container,
+                    GtkWidget    *child)
+{
+  gint    i = -1;
+  gint    n = 0;
+  GList  *children;
+  GList  *item;
+  
+  children = gtk_container_get_children (container);
+  for (item = children; item; item = item->next) {
+    if (item->data == child) {
+      i = n;
+    }
+    n ++;
+  }
+  g_list_free (children);
+  
+  return n - i;
+}
+
+static void
+ggu_message_box_remove (GtkContainer *container,
+                        GtkWidget    *child)
+{
+  GguMessageBox *self = GGU_MESSAGE_BOX (container);
+  
+  if (g_queue_find (self->priv->children, child) &&
+      gtk_widget_get_realized (child)) {
+    GtkWidget *anim;
+    gint       child_pos;
+    
+    anim = ggu_fade_out_widget_new (gtk_orientable_get_orientation (GTK_ORIENTABLE (self)),
+                                    child);
+    child_pos = get_child_position (container, child);
+    gtk_box_pack_end (GTK_BOX (self), anim, TRUE, TRUE, 0);
+    gtk_box_reorder_child (GTK_BOX (self), anim, child_pos);
+    ggu_message_box_real_remove (container, child);
+    gtk_widget_show (anim);
+  } else {
+    ggu_message_box_real_remove (container, child);
+  }
 }
 
 

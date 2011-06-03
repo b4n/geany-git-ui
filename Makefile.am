@@ -20,6 +20,8 @@ ggu_git_lib_sources = git-lib/ggu-git.c \
 
 ggu_plugin_sources  = src/ggu-auto-link-label.c \
                       src/ggu-auto-link-label.h \
+                      src/ggu-fade-out-widget.c \
+                      src/ggu-fade-out-widget.h \
                       src/ggu-message-box.c \
                       src/ggu-message-box.h \
                       src/ggu-message-info.c \
