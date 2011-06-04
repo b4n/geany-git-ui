@@ -45,6 +45,7 @@
 #include <gtk/gtk.h>
 
 #include "ggu-glib-compat.h"
+#include "ggu-gtk-compat.h"
 
 
 #define FRAME_DURATION 30

@@ -1,7 +1,8 @@
 
 lib_LTLIBRARIES = libgeany-git-ui.la
 
-ggu_compat_sources  = compat/ggu-glib-compat.h
+ggu_compat_sources  = compat/ggu-glib-compat.h \
+                      compat/ggu-gtk-compat.h
 
 ggu_git_lib_sources = git-lib/ggu-git.c \
                       git-lib/ggu-git.h \
