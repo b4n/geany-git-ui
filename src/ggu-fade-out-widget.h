@@ -43,13 +43,13 @@ typedef struct _GguFadeOutWidgetPrivate GguFadeOutWidgetPrivate;
 
 struct _GguFadeOutWidget
 {
-  GtkImage parent_instance;
+  GtkDrawingArea parent_instance;
   GguFadeOutWidgetPrivate *priv;
 };
 
 struct _GguFadeOutWidgetClass
 {
-  GtkImageClass parent_class;
+  GtkDrawingAreaClass parent_class;
 };
 
 

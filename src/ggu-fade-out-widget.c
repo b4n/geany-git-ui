@@ -21,9 +21,9 @@
 
 /**
  * #GguFadeOutWidget is a widget that makes animating another widget for fade
- * out easy. It takes a snapshot of the given widget and animates a fad out
- * with it, destroying itself when the animation finished (thus making the
- * widget disappear).
+ * out easy. It takes a snapshot of the given widget and animates a fade out
+ * with it, destroying itself when the animation finished (thus when the
+ * widget disappeared).
  * 
  * The fact a snapshot is taken has pro and cons:
  *  * The animation will not be updated to new state of the widget. For
@@ -31,10 +31,6 @@
  *    from it.
  *  * The widget may be destroyed after the #GguFadeOutWidget is created,
  *    making easy to add animation on widget destruction.
- * 
- * TODO: make this inherit from GtkWidget rather than GtkImage, being
- * a GtkImage is only convenient for not to have to manage size and drawing
- * ourselves.
  */
 
 #include "ggu-fade-out-widget.h"
@@ -55,6 +51,8 @@ struct _GguFadeOutWidgetPrivate
 {
   GtkOrientation  orientation;
   GdkPixbuf      *pixbuf;
+  gint            pixbuf_width;
+  gint            pixbuf_height;
   GSource        *source;
   
   gdouble         factor;
@@ -72,12 +70,16 @@ static void     ggu_fade_out_widget_set_propery               (GObject      *obj
                                                                guint         prop_id,
                                                                const GValue *value,
                                                                GParamSpec   *pspec);
+static gboolean ggu_fade_out_widget_expose_event              (GtkWidget      *widget,
+                                                               GdkEventExpose *event);
+static void     ggu_fade_out_widget_size_request              (GtkWidget      *widget,
+                                                               GtkRequisition *requisition);
 static void     ggu_fade_out_widget_show                      (GtkWidget *widget);
 
 
 G_DEFINE_TYPE_WITH_CODE (GguFadeOutWidget,
                          ggu_fade_out_widget,
-                         GTK_TYPE_IMAGE,
+                         GTK_TYPE_DRAWING_AREA,
                          G_IMPLEMENT_INTERFACE (GTK_TYPE_ORIENTABLE,
                                                 NULL))
 
@@ -111,14 +113,16 @@ ggu_fade_out_widget_finalize (GObject *object)
 static void
 ggu_fade_out_widget_class_init (GguFadeOutWidgetClass *klass)
 {
-  GObjectClass   *object_class    = G_OBJECT_CLASS (klass);
-  GtkWidgetClass *widget_class    = GTK_WIDGET_CLASS (klass);
+  GObjectClass   *object_class = G_OBJECT_CLASS (klass);
+  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
   
   object_class->finalize      = ggu_fade_out_widget_finalize;
   object_class->get_property  = ggu_fade_out_widget_get_propery;
   object_class->set_property  = ggu_fade_out_widget_set_propery;
   
-  widget_class->show = ggu_fade_out_widget_show;
+  widget_class->expose_event  = ggu_fade_out_widget_expose_event;
+  widget_class->size_request  = ggu_fade_out_widget_size_request;
+  widget_class->show          = ggu_fade_out_widget_show;
   
   g_object_class_override_property (object_class,
                                     PROP_ORIENTATION,
@@ -155,6 +159,8 @@ ggu_fade_out_widget_init (GguFadeOutWidget *self)
   
   self->priv->orientation = GTK_ORIENTATION_HORIZONTAL;
   self->priv->pixbuf = NULL;
+  self->priv->pixbuf_width = 0;
+  self->priv->pixbuf_height = 0;
   self->priv->source = NULL;
   self->priv->factor = 2.0;
   self->priv->width = 0.0;
@@ -206,13 +212,13 @@ ggu_fade_out_widget_set_propery (GObject      *object,
                    "widget");
       } else {
         GdkPixmap  *pixmap;
-        gint        width = 0;
-        gint        height = 0;
         
         pixmap = gtk_widget_get_snapshot (widget, NULL);
-        gdk_pixmap_get_size (GDK_DRAWABLE (pixmap), &width, &height);
-        self->priv->width = width * 1.0;
-        self->priv->height = height * 1.0;
+        gdk_pixmap_get_size (pixmap,
+                             &self->priv->pixbuf_width,
+                             &self->priv->pixbuf_height);
+        self->priv->width = self->priv->pixbuf_width * 1.0;
+        self->priv->height = self->priv->pixbuf_height * 1.0;
         if (self->priv->pixbuf) {
           g_object_unref (self->priv->pixbuf);
         }
@@ -220,10 +226,9 @@ ggu_fade_out_widget_set_propery (GObject      *object,
                                                            GDK_DRAWABLE (pixmap),
                                                            gtk_widget_get_colormap (widget),
                                                            0, 0, 0, 0,
-                                                           width,
-                                                           height);
+                                                           self->priv->pixbuf_width,
+                                                           self->priv->pixbuf_height);
         g_object_unref (pixmap);
-        gtk_image_set_from_pixbuf (GTK_IMAGE (self), self->priv->pixbuf);
       }
     } break;
     
@@ -236,31 +241,59 @@ ggu_fade_out_widget_set_propery (GObject      *object,
 static gboolean
 fade_out_func (gpointer data)
 {
-  GguFadeOutWidget *self    = data;
-  gint              width   = gdk_pixbuf_get_width (self->priv->pixbuf);
-  gint              height  = gdk_pixbuf_get_height (self->priv->pixbuf);
+  GguFadeOutWidget *self = data;
   
   if (self->priv->orientation == GTK_ORIENTATION_HORIZONTAL) {
-    self->priv->width -= MAX (0.01, width / self->priv->factor);
-    width = (gint)self->priv->width;
+    self->priv->width -= MAX (0.01, self->priv->pixbuf_width / self->priv->factor);
   } else {
-    self->priv->height -= MAX (0.01, height / self->priv->factor);
-    height = (gint)self->priv->height;
+    self->priv->height -= MAX (0.01, self->priv->pixbuf_height / self->priv->factor);
   }
-  if (width > 0 && height > 0) {
-    GdkPixbuf *new;
-    
-    new = gdk_pixbuf_scale_simple (self->priv->pixbuf, width, height,
-                                   GDK_INTERP_TILES);
-    gtk_image_set_from_pixbuf (GTK_IMAGE (self), new);
-    g_object_unref (new);
+  if ((gint) self->priv->width > 0 && (gint) self->priv->height > 0) {
+    gtk_widget_queue_resize (GTK_WIDGET (self));
     
     return TRUE;
   } else {
     self->priv->source = NULL;
-    gtk_image_set_from_pixbuf (GTK_IMAGE (self), NULL);
     gtk_widget_destroy (GTK_WIDGET (self));
     return FALSE;
+  }
+}
+
+static gboolean
+ggu_fade_out_widget_expose_event (GtkWidget      *widget,
+                                  GdkEventExpose *event)
+{
+  GguFadeOutWidget *self    = GGU_FADE_OUT_WIDGET (widget);
+  GdkWindow        *window  = gtk_widget_get_window (widget);
+  gint              win_width;
+  gint              win_height;
+  cairo_t          *cr;
+  
+  gdk_window_get_size (window, &win_width, &win_height);
+  
+  cr = gdk_cairo_create (GDK_DRAWABLE (window));
+  cairo_scale (cr,
+               (gdouble) win_width / (gdouble) self->priv->pixbuf_width,
+               (gdouble) win_height / (gdouble) self->priv->pixbuf_height);
+  gdk_cairo_set_source_pixbuf (cr, self->priv->pixbuf, 0.0, 0.0);
+  cairo_paint (cr);
+  cairo_destroy (cr);
+  
+  return FALSE;
+}
+
+static void
+ggu_fade_out_widget_size_request (GtkWidget      *widget,
+                                  GtkRequisition *requisition)
+{
+  GguFadeOutWidget *self = GGU_FADE_OUT_WIDGET (widget);
+  
+  if (self->priv->orientation == GTK_ORIENTATION_HORIZONTAL) {
+    requisition->width = (gint) self->priv->width;
+    requisition->height = 0;
+  } else {
+    requisition->width = 0;
+    requisition->height = (gint) self->priv->height;
   }
 }
 
