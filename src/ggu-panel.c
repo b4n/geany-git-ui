@@ -152,6 +152,8 @@ static gboolean   history_view_query_tooltip_handler      (GtkTreeView  *tree_vi
 static gboolean   history_view_button_press_event_handler (GtkWidget       *widget,
                                                            GdkEventButton  *event,
                                                            GguPanel        *self);
+static gboolean   history_view_popup_menu_hanlder         (GtkWidget *widget,
+                                                           GguPanel  *self);
 static void       history_view_hash_cell_set_data_func    (GtkCellLayout   *cell_layout,
                                                            GtkCellRenderer *cell,
                                                            GtkTreeModel    *model,
@@ -316,6 +318,8 @@ ggu_panel_init (GguPanel *self)
                     G_CALLBACK (history_view_query_tooltip_handler), self);
   g_signal_connect (self->priv->history_view, "button-press-event",
                     G_CALLBACK (history_view_button_press_event_handler), self);
+  g_signal_connect (self->priv->history_view, "popup-menu",
+                    G_CALLBACK (history_view_popup_menu_hanlder), self);
   gtk_widget_set_has_tooltip (self->priv->history_view, TRUE);
   /* hash column */
   column = gtk_tree_view_column_new ();
@@ -598,6 +602,81 @@ history_view_button_press_event_handler (GtkWidget       *widget,
   }
   
   return handled;
+}
+
+/* Position function for the history view popup menu.
+ * It positions the popup below the selected row, or above if it doesn't fit.
+ * If there is no selection, positions on the top left corner. */
+static void
+history_view_popup_menu_position_func (GtkMenu   *menu,
+                                       gint      *x,
+                                       gint      *y,
+                                       gboolean  *push_in,
+                                       GguPanel  *self)
+{
+  GtkTreeView      *view = GTK_TREE_VIEW (self->priv->history_view);
+  GtkTreeSelection *selection;
+  GtkTreeModel     *model;
+  GtkTreeIter       iter;
+  
+  gdk_window_get_origin (gtk_widget_get_window (GTK_WIDGET (view)), x, y);
+  /* We let GTK do whatever she wants, so we just give a reasonable
+   * suggestion without the need to check if we really end up with something
+   * valuable (though we try hard) */
+  *push_in = TRUE;
+  
+  selection = gtk_tree_view_get_selection (view);
+  if (gtk_tree_selection_get_selected (selection, &model, &iter)) {
+    GdkScreen      *screen = gtk_widget_get_screen (GTK_WIDGET (view));
+    GtkTreePath    *path;
+    GdkRectangle    rect;
+    GtkRequisition  menu_req;
+    
+    gtk_widget_size_request (GTK_WIDGET (menu), &menu_req);
+    
+    path = gtk_tree_model_get_path (model, &iter);
+    gtk_tree_view_get_cell_area (view, path, NULL, &rect);
+    gtk_tree_view_convert_bin_window_to_widget_coords (view, 0, rect.y,
+                                                       NULL, &rect.y);
+    gtk_tree_path_free (path);
+    
+    (*y) += rect.y + rect.height;
+    /* If the menu doesn't fit below the row, try above */
+    if ((*y) + menu_req.height > gdk_screen_get_height (screen)) {
+      (*y) -= rect.height + menu_req.height;
+    }
+  } else {
+    gtk_tree_view_convert_bin_window_to_widget_coords (view, 0, *y, NULL, y);
+  }
+}
+
+static gboolean
+history_view_popup_menu_hanlder (GtkWidget *widget,
+                                 GguPanel  *self)
+{
+  GtkTreeView      *view = GTK_TREE_VIEW (self->priv->history_view);
+  GtkTreeSelection *selection;
+  GtkTreeModel     *model;
+  GtkTreeIter       iter;
+  GtkWidget        *menu;
+  
+  selection = gtk_tree_view_get_selection (view);
+  if (gtk_tree_selection_get_selected (selection, &model, &iter)) {
+    GtkTreePath  *path;
+    
+    path = gtk_tree_model_get_path (model, &iter);
+    gtk_tree_view_scroll_to_cell (view, path, NULL, FALSE, 0.0, 0.0);
+    menu = create_popup_menu (self, path);
+    gtk_tree_path_free (path);
+  } else {
+    menu = create_popup_menu (self, NULL);
+  }
+  /* FIXME: popup at the selection position */
+  gtk_menu_popup (GTK_MENU (menu), NULL, NULL,
+                  (GtkMenuPositionFunc) history_view_popup_menu_position_func,
+                  self, 0, gtk_get_current_event_time ());
+  
+  return TRUE;
 }
 
 static void
