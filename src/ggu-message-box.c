@@ -77,8 +77,6 @@ static void     ggu_message_box_add                           (GtkContainer *con
                                                                GtkWidget    *child);
 static void     ggu_message_box_remove                        (GtkContainer *container,
                                                                GtkWidget    *child);
-static void     ggu_message_box_release_child                 (GguMessageBox *self,
-                                                               GtkWidget     *child);
 
 
 G_DEFINE_TYPE (GguMessageBox,
@@ -224,24 +222,17 @@ ggu_message_box_add (GtkContainer *container,
   GguMessageBox *self = GGU_MESSAGE_BOX (container);
   
   g_queue_push_tail (self->priv->children, child);
-  g_signal_connect_swapped (child, "destroy",
-                            G_CALLBACK (ggu_message_box_release_child), self);
   ggu_message_box_apply_limits (self);
   gtk_box_pack_end (GTK_BOX (self), child, TRUE, TRUE, 0);
-}
-
-static void
-ggu_message_box_release_child (GguMessageBox *self,
-                               GtkWidget     *child)
-{
-  g_queue_remove (self->priv->children, child);
 }
 
 static void
 ggu_message_box_real_remove (GtkContainer *container,
                              GtkWidget    *child)
 {
-  ggu_message_box_release_child (GGU_MESSAGE_BOX (container), child);
+  GguMessageBox *self = GGU_MESSAGE_BOX (container);
+  
+  g_queue_remove (self->priv->children, child);
   GTK_CONTAINER_CLASS (ggu_message_box_parent_class)->remove (container, child);
 }
 
