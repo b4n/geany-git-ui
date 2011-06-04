@@ -72,20 +72,11 @@ enum
 
 
 static void
-ggu_message_info_finalize (GObject *object)
-{
-  GguMessageInfo *self = GGU_MESSAGE_INFO (object);
-  
-  G_OBJECT_CLASS (ggu_message_info_parent_class)->finalize (object);
-}
-
-static void
 ggu_message_info_class_init (GguMessageInfoClass *klass)
 {
   GObjectClass   *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
   
-  object_class->finalize      = ggu_message_info_finalize;
   object_class->get_property  = ggu_message_info_get_propery;
   object_class->set_property  = ggu_message_info_set_propery;
   
