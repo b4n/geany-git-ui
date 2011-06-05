@@ -156,9 +156,9 @@ ggu_message_box_init (GguMessageBox *self)
 
 static void
 ggu_message_box_get_propery (GObject    *object,
-                              guint       prop_id,
-                              GValue     *value,
-                              GParamSpec *pspec)
+                             guint       prop_id,
+                             GValue     *value,
+                             GParamSpec *pspec)
 {
   GguMessageBox *self = GGU_MESSAGE_BOX (object);
   
