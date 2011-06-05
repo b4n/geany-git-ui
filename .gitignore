@@ -21,3 +21,6 @@ config.*
 *.lo
 *.la
 *.so
+
+# generated sources
+/src/ggu-marshal.[ch]

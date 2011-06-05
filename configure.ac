@@ -22,5 +22,8 @@ PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.16
                            gtk+-2.0 >= 2.20
                            geany >= 0.21])
 
+AC_PATH_PROG([GLIB_GENMARSHAL], [glib-genmarshal], [None])
+AC_SUBST([GLIB_GENMARSHAL])
+
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
