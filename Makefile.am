@@ -25,6 +25,10 @@ ggu_plugin_sources  = src/ggu-auto-link-label.c \
                       src/ggu-auto-link-label.h \
                       src/ggu-fade-out-widget.c \
                       src/ggu-fade-out-widget.h \
+                      src/ggu-history-store.c \
+                      src/ggu-history-store.h \
+                      src/ggu-history-view.c \
+                      src/ggu-history-view.h \
                       src/ggu-message-box.c \
                       src/ggu-message-box.h \
                       src/ggu-message-info.c \

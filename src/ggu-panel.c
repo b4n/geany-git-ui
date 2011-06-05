@@ -33,6 +33,8 @@
 #include "git-lib/ggu-git-branch.h"
 #include "git-lib/ggu-git-show.h"
 #include "ggu-auto-link-label.h"
+#include "ggu-history-store.h"
+#include "ggu-history-view.h"
 #include "ggu-message-box.h"
 #include "ggu-message-info.h"
 
@@ -97,78 +99,64 @@ enum
 
 struct _GguPanelPrivate
 {
-  GeanyDocument  *doc;
-  gchar          *root;
-  gchar          *path;
+  GeanyDocument    *doc;
+  gchar            *root;
+  gchar            *path;
   
-  guint           loading_count;
+  guint             loading_count;
   
-  GguGitLog      *logger;
-  GCancellable   *log_cancellable;
-  GguGitBranch   *brancher;
-  GCancellable   *branch_cancellable;
-  GguGitShow     *shower;
-  GCancellable   *show_cancellable;
+  GguGitLog        *logger;
+  GCancellable     *log_cancellable;
+  GguGitBranch     *brancher;
+  GCancellable     *branch_cancellable;
+  GguGitShow       *shower;
+  GCancellable     *show_cancellable;
   
-  GtkWidget      *loading_spinner;
-  GtkWidget      *file_path; /* FIXME: use a custom widget that shows repo root/current path */
+  GtkWidget        *loading_spinner;
+  GtkWidget        *file_path; /* FIXME: use a custom widget that shows repo root/current path */
   /* branch show/switch */
-  GtkListStore   *branch_store;
-  GtkWidget      *branch_combo;
-  GtkWidget      *branch_switch;
+  GtkListStore     *branch_store;
+  GtkWidget        *branch_combo;
+  GtkWidget        *branch_switch;
   /* history */
-  GtkListStore   *history_store;
-  GtkWidget      *history_view;
+  GguHistoryStore  *history_store;
+  GtkWidget        *history_view;
   /* commit display */
-  GtkWidget      *commit_container; 
-  GtkWidget      *commit_hash;
-  GtkWidget      *commit_date;
-  GtkWidget      *commit_author;
-  GtkTextBuffer  *commit_message_buffer;
+  GtkWidget        *commit_container;
+  GtkWidget        *commit_hash;
+  GtkWidget        *commit_date;
+  GtkWidget        *commit_author;
+  GtkTextBuffer    *commit_message_buffer;
   
   /* message displaying */
-  GtkWidget      *message_area;
+  GtkWidget        *message_area;
 };
 
 
-static void       ggu_panel_loading_push        (GguPanel *self);
-static void       ggu_panel_loading_pop         (GguPanel *self);
-static void       ggu_panel_show_rev            (GguPanel *self,
-                                                 const gchar   *rev,
-                                                 gboolean       diff,
-                                                 GeanyDocument *doc);
-static void       ggu_panel_update_history      (GguPanel    *self,
-                                                 const gchar *rev);
-static void       ggu_panel_update_branch_list  (GguPanel *self);
+static void       ggu_panel_loading_push                  (GguPanel *self);
+static void       ggu_panel_loading_pop                   (GguPanel *self);
+static void       ggu_panel_show_rev                      (GguPanel *self,
+                                                           const gchar   *rev,
+                                                           gboolean       diff,
+                                                           GeanyDocument *doc);
+static void       ggu_panel_update_history                (GguPanel    *self,
+                                                           const gchar *rev);
+static void       ggu_panel_update_branch_list            (GguPanel *self);
 
-static void       branch_combo_changed_handler  (GtkComboBox *combo,
-                                                 GguPanel    *self);
-static gboolean   history_view_query_tooltip_handler      (GtkTreeView  *tree_view,
-                                                           gint          x,
-                                                           gint          y,
-                                                           gboolean      keyboard_mode,
-                                                           GtkTooltip   *tooltip,
-                                                           GguPanel     *self);
-static gboolean   history_view_button_press_event_handler (GtkWidget       *widget,
-                                                           GdkEventButton  *event,
-                                                           GguPanel        *self);
-static gboolean   history_view_popup_menu_hanlder         (GtkWidget *widget,
-                                                           GguPanel  *self);
-static void       history_view_hash_cell_set_data_func    (GtkCellLayout   *cell_layout,
-                                                           GtkCellRenderer *cell,
-                                                           GtkTreeModel    *model,
-                                                           GtkTreeIter     *iter,
-                                                           gpointer         data);
-static void       history_view_summary_cell_set_data_func (GtkCellLayout   *cell_layout,
-                                                           GtkCellRenderer *cell,
-                                                           GtkTreeModel    *model,
-                                                           GtkTreeIter     *iter,
-                                                           gpointer         data);
 static void       history_view_selection_changed_handler  (GtkTreeSelection *selection,
                                                            GguPanel         *self);
+static void       history_view_populate_popup_handler     (GguHistoryView *view,
+                                                           GtkTreePath    *path,
+                                                           GtkTreeIter    *iter,
+                                                           GtkMenu        *menu,
+                                                           GguPanel       *self);
+static void       branch_combo_changed_handler            (GtkComboBox *combo,
+                                                           GguPanel    *self);
 
 
-G_DEFINE_TYPE (GguPanel, ggu_panel, GTK_TYPE_VBOX)
+G_DEFINE_TYPE (GguPanel,
+               ggu_panel,
+               GTK_TYPE_VBOX)
 
 
 static void
@@ -232,7 +220,6 @@ ggu_panel_init (GguPanel *self)
   GtkWidget          *table;
   GtkWidget          *scrolled;
   GtkWidget          *label;
-  GtkTreeViewColumn  *column;
   GtkCellRenderer    *cell;
   GtkTreeSelection   *selection;
   PangoAttrList      *attrs;
@@ -309,42 +296,10 @@ ggu_panel_init (GguPanel *self)
                            "shadow-type", GTK_SHADOW_IN,
                            NULL);
   gtk_box_pack_start (GTK_BOX (vbox), scrolled, TRUE, TRUE, 0);
-  self->priv->history_store = gtk_list_store_new (HISTORY_N_COLUMNS,
-                                                  GGU_TYPE_GIT_LOG_ENTRY);
-  self->priv->history_view = gtk_tree_view_new_with_model (GTK_TREE_MODEL (self->priv->history_store));
-  gtk_tree_view_set_headers_visible (GTK_TREE_VIEW (self->priv->history_view),
-                                     FALSE);
-  g_signal_connect (self->priv->history_view, "query-tooltip",
-                    G_CALLBACK (history_view_query_tooltip_handler), self);
-  g_signal_connect (self->priv->history_view, "button-press-event",
-                    G_CALLBACK (history_view_button_press_event_handler), self);
-  g_signal_connect (self->priv->history_view, "popup-menu",
-                    G_CALLBACK (history_view_popup_menu_hanlder), self);
-  gtk_widget_set_has_tooltip (self->priv->history_view, TRUE);
-  /* hash column */
-  column = gtk_tree_view_column_new ();
-  gtk_tree_view_column_set_title (column, _("Hash"));
-  cell = g_object_new (GTK_TYPE_CELL_RENDERER_TEXT,
-                       "style", PANGO_STYLE_ITALIC,
-                       NULL);
-  gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (column), cell, TRUE);
-  gtk_cell_layout_set_cell_data_func (GTK_CELL_LAYOUT (column), cell,
-                                      history_view_hash_cell_set_data_func,
-                                      NULL, NULL);
-  gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->history_view),
-                               column);
-  /* summary column */
-  column = gtk_tree_view_column_new ();
-  gtk_tree_view_column_set_title (column, _("Summary"));
-  cell = g_object_new (GTK_TYPE_CELL_RENDERER_TEXT,
-                       "ellipsize", PANGO_ELLIPSIZE_END,
-                       NULL);
-  gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (column), cell, TRUE);
-  gtk_cell_layout_set_cell_data_func (GTK_CELL_LAYOUT (column), cell,
-                                      history_view_summary_cell_set_data_func,
-                                      NULL, NULL);
-  gtk_tree_view_append_column (GTK_TREE_VIEW (self->priv->history_view),
-                               column);
+  self->priv->history_store = ggu_history_store_new ();
+  self->priv->history_view = ggu_history_view_new (self->priv->history_store);
+  g_signal_connect (self->priv->history_view, "populate-popup",
+                    G_CALLBACK (history_view_populate_popup_handler), self);
   gtk_container_add (GTK_CONTAINER (scrolled), self->priv->history_view);
   selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->history_view));
   g_signal_connect (selection, "changed",
@@ -470,8 +425,6 @@ ggu_panel_set_git_path (GguPanel    *self,
   g_free (tooltip);
 }
 
-/* tree view popup menu stuff */
-
 #define DOCUMENT_KEY  "ggu-geany-document"
 #define LOG_ENTRY_KEY "ggu-log-entry"
 
@@ -527,156 +480,44 @@ create_popup_menu_item (GguPanel       *self,
   return item;
 }
 
-static GtkWidget *
-create_popup_menu (GguPanel    *self,
-                   GtkTreePath *path)
+static void
+history_view_populate_popup_handler (GguHistoryView *view,
+                                     GtkTreePath    *path,
+                                     GtkTreeIter    *iter,
+                                     GtkMenu        *menu,
+                                     GguPanel       *self)
 {
-  GtkWidget      *menu;
-  GtkWidget      *item;
   GguGitLogEntry *entry = NULL;
+  GtkWidget      *item;
   
-  if (path) {
-    GtkTreeIter iter;
-    
-    gtk_tree_model_get_iter (GTK_TREE_MODEL (self->priv->history_store),
-                             &iter, path);
-    gtk_tree_model_get (GTK_TREE_MODEL (self->priv->history_store), &iter,
-                        HISTORY_ENTRY, &entry, -1);
+  if (iter) {
+    entry = ggu_history_store_get_entry (self->priv->history_store, iter);
   }
-  
-  menu = gtk_menu_new ();
-  /* show */
+
+  /* <sep> */
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
+  /* show diff */
   item = create_popup_menu_item (self, _("Show _diff"), entry,
                                  show_diff_activate_handler);
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+  /* shiw content */
   item = create_popup_menu_item (self, _("Show _full content"), entry,
                                  show_content_activate_handler);
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-  item = gtk_separator_menu_item_new ();
-  gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-  /* replace */
+  /* <sep> */
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
+  /* replace content */
   item = create_popup_menu_item (self, _("_Replace document content"), entry,
                                  replace_content_activate_handler);
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-  item = gtk_separator_menu_item_new ();
-  gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+  /* <sep> */
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
   /* general stuff */
   item = gtk_image_menu_item_new_with_mnemonic (_("Re_load repository"));
   gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (item),
                                  gtk_image_new_from_stock (GTK_STOCK_REFRESH,
                                                            GTK_ICON_SIZE_MENU));
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-  
-  gtk_widget_show_all (menu);
-  
-  if (entry) {
-    ggu_git_log_entry_unref (entry);
-  }
-  
-  return menu;
-}
-
-static gboolean
-history_view_button_press_event_handler (GtkWidget       *widget,
-                                         GdkEventButton  *event,
-                                         GguPanel        *self)
-{
-  GtkTreeView  *view = GTK_TREE_VIEW (widget);
-  gboolean      handled;
-  
-  /* run the default handler manually for it to set tup selection and stuff */
-  handled = GTK_WIDGET_GET_CLASS (widget)->button_press_event (widget, event);
-  if (event->button == 3) {
-    GtkTreePath  *path;
-    GtkWidget    *menu;
-    
-    if (gtk_tree_view_get_path_at_pos (view, (gint) event->x, (gint) event->y,
-                                       &path, NULL, NULL, NULL)) {
-      menu = create_popup_menu (self, path);
-      gtk_tree_path_free (path);
-    } else {
-      menu = create_popup_menu (self, NULL);
-    }
-    gtk_menu_popup (GTK_MENU (menu), NULL, NULL, NULL, NULL, event->button,
-                    event->time);
-  }
-  
-  return handled;
-}
-
-/* Position function for the history view popup menu.
- * It positions the popup below the selected row, or above if it doesn't fit.
- * If there is no selection, positions on the top left corner. */
-static void
-history_view_popup_menu_position_func (GtkMenu   *menu,
-                                       gint      *x,
-                                       gint      *y,
-                                       gboolean  *push_in,
-                                       GguPanel  *self)
-{
-  GtkTreeView      *view = GTK_TREE_VIEW (self->priv->history_view);
-  GtkTreeSelection *selection;
-  GtkTreeModel     *model;
-  GtkTreeIter       iter;
-  
-  gdk_window_get_origin (gtk_widget_get_window (GTK_WIDGET (view)), x, y);
-  /* We let GTK do whatever she wants, so we just give a reasonable
-   * suggestion without the need to check if we really end up with something
-   * valuable (though we try hard) */
-  *push_in = TRUE;
-  
-  selection = gtk_tree_view_get_selection (view);
-  if (gtk_tree_selection_get_selected (selection, &model, &iter)) {
-    GdkScreen      *screen = gtk_widget_get_screen (GTK_WIDGET (view));
-    GtkTreePath    *path;
-    GdkRectangle    rect;
-    GtkRequisition  menu_req;
-    
-    gtk_widget_size_request (GTK_WIDGET (menu), &menu_req);
-    
-    path = gtk_tree_model_get_path (model, &iter);
-    gtk_tree_view_get_cell_area (view, path, NULL, &rect);
-    gtk_tree_view_convert_bin_window_to_widget_coords (view, 0, rect.y,
-                                                       NULL, &rect.y);
-    gtk_tree_path_free (path);
-    
-    (*y) += rect.y + rect.height;
-    /* If the menu doesn't fit below the row, try above */
-    if ((*y) + menu_req.height > gdk_screen_get_height (screen)) {
-      (*y) -= rect.height + menu_req.height;
-    }
-  } else {
-    gtk_tree_view_convert_bin_window_to_widget_coords (view, 0, *y, NULL, y);
-  }
-}
-
-static gboolean
-history_view_popup_menu_hanlder (GtkWidget *widget,
-                                 GguPanel  *self)
-{
-  GtkTreeView      *view = GTK_TREE_VIEW (self->priv->history_view);
-  GtkTreeSelection *selection;
-  GtkTreeModel     *model;
-  GtkTreeIter       iter;
-  GtkWidget        *menu;
-  
-  selection = gtk_tree_view_get_selection (view);
-  if (gtk_tree_selection_get_selected (selection, &model, &iter)) {
-    GtkTreePath  *path;
-    
-    path = gtk_tree_model_get_path (model, &iter);
-    gtk_tree_view_scroll_to_cell (view, path, NULL, FALSE, 0.0, 0.0);
-    menu = create_popup_menu (self, path);
-    gtk_tree_path_free (path);
-  } else {
-    menu = create_popup_menu (self, NULL);
-  }
-  /* FIXME: popup at the selection position */
-  gtk_menu_popup (GTK_MENU (menu), NULL, NULL,
-                  (GtkMenuPositionFunc) history_view_popup_menu_position_func,
-                  self, 0, gtk_get_current_event_time ());
-  
-  return TRUE;
 }
 
 static void
@@ -703,89 +544,13 @@ history_view_selection_changed_handler (GtkTreeSelection *selection,
   }
 }
 
-static gboolean
-history_view_query_tooltip_handler (GtkTreeView  *tree_view,
-                                    gint          x,
-                                    gint          y,
-                                    gboolean      keyboard_mode,
-                                    GtkTooltip   *tooltip,
-                                    GguPanel     *self)
-{
-  GtkTreeModel   *model;
-  GtkTreePath    *path;
-  GtkTreeIter     iter;
-  GguGitLogEntry *entry;
-  gchar          *markup;
-  
-  if (! gtk_tree_view_get_tooltip_context (tree_view, &x, &y, keyboard_mode,
-                                           &model, &path, &iter)) {
-    return FALSE;
-  }
-  
-  gtk_tree_model_get (model, &iter, HISTORY_ENTRY, &entry, -1);
-#if 1
-  markup = g_markup_printf_escaped ("%s\n"
-                                    "<small>"
-                                    "<b>hash:</b>\t%s\n"
-                                    "<b>date:</b>\t%s\n"
-                                    "<b>author:</b>\t%s"
-                                    "</small>",
-                                    entry->summary, entry->hash, entry->date,
-                                    entry->author);
-#else
-  markup = g_markup_escape_text (entry->summary, -1);
-#endif
-  ggu_git_log_entry_unref (entry);
-  
-  gtk_tooltip_set_markup (tooltip, markup);
-  gtk_tree_view_set_tooltip_row (tree_view, tooltip, path);
-  
-  g_free (markup);
-  gtk_tree_path_free (path);
-  
-  return TRUE;
-}
-
-/* function used to set the data of the cell renderer that renders the hash */
-static void
-history_view_hash_cell_set_data_func (GtkCellLayout   *cell_layout,
-                                      GtkCellRenderer *cell,
-                                      GtkTreeModel    *model,
-                                      GtkTreeIter     *iter,
-                                      gpointer         data)
-{
-  GguGitLogEntry *entry;
-  GValue          value = { 0 };
-  
-  gtk_tree_model_get (model, iter, HISTORY_ENTRY, &entry, -1);
-  g_value_init (&value, G_TYPE_STRING);
-  g_value_take_string (&value, g_strndup (entry->hash, 7));
-  g_object_set_property (G_OBJECT (cell), "text", &value);
-  g_value_unset (&value);
-  ggu_git_log_entry_unref (entry);
-}
-
-static void
-history_view_summary_cell_set_data_func (GtkCellLayout   *cell_layout,
-                                         GtkCellRenderer *cell,
-                                         GtkTreeModel    *model,
-                                         GtkTreeIter     *iter,
-                                         gpointer         data)
-{
-  GguGitLogEntry *entry;
-  
-  gtk_tree_model_get (model, iter, HISTORY_ENTRY, &entry, -1);
-  g_object_set (G_OBJECT (cell), "text", entry->summary, NULL);
-  ggu_git_log_entry_unref (entry);
-}
-
 static void
 branch_combo_changed_handler (GtkComboBox *combo,
                               GguPanel    *self)
 {
   GtkTreeIter iter;
   
-  gtk_list_store_clear (self->priv->history_store);
+  gtk_list_store_clear (GTK_LIST_STORE (self->priv->history_store));
   gtk_widget_set_sensitive (self->priv->branch_switch, FALSE);
   if (gtk_combo_box_get_active_iter (combo, &iter)) {
     gchar  *branch;
@@ -959,11 +724,7 @@ ggu_panel_update_history_async_finished_handler (GObject      *object,
     g_error_free (error);
   } else {
     for (; entries; entries = entries->next) {
-      GtkTreeIter iter;
-      
-      gtk_list_store_append (self->priv->history_store, &iter);
-      gtk_list_store_set (self->priv->history_store, &iter,
-                          HISTORY_ENTRY, entries->data, -1);
+      ggu_history_store_append (self->priv->history_store, entries->data);
     }
   }
 }
@@ -973,7 +734,7 @@ ggu_panel_update_history (GguPanel    *self,
                           const gchar *rev)
 {
   g_cancellable_cancel (self->priv->log_cancellable);
-  gtk_list_store_clear (self->priv->history_store);
+  gtk_list_store_clear (GTK_LIST_STORE (self->priv->history_store));
   
   if (self->priv->logger) {
     g_object_unref (self->priv->logger);
@@ -1077,7 +838,7 @@ ggu_panel_set_document (GguPanel       *self,
     g_cancellable_cancel (self->priv->log_cancellable);
     g_cancellable_cancel (self->priv->branch_cancellable);
     
-    gtk_list_store_clear (self->priv->history_store);
+    gtk_list_store_clear (GTK_LIST_STORE (self->priv->history_store));
     gtk_list_store_clear (self->priv->branch_store);
   } else {
     /*ggu_panel_update_history (self, root, NULL, inner_path);*/
