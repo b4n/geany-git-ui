@@ -48,5 +48,5 @@ libgeany_git_ui_la_LIBADD  = $(AM_LIBS)
 
 
 ACLOCAL_AMFLAGS = -I build/m4
-AM_CFLAGS       = $(GLIB_CFLAGS) -Igit-lib/ -Icompat/
+AM_CFLAGS       = $(GLIB_CFLAGS) -I$(top_srcdir)/git-lib/ -I$(top_srcdir)/compat/
 AM_LIBS         = $(GLIB_LIBS)
