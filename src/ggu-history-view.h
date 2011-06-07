@@ -25,6 +25,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "ggu-tree-view.h"
 #include "ggu-history-store.h"
 
 G_BEGIN_DECLS
@@ -44,18 +45,13 @@ typedef struct _GguHistoryViewPrivate GguHistoryViewPrivate;
 
 struct _GguHistoryView
 {
-  GtkTreeView parent_instance;
+  GguTreeView parent_instance;
   GguHistoryViewPrivate *priv;
 };
 
 struct _GguHistoryViewClass
 {
-  GtkTreeViewClass parent_class;
-  
-  void      (*populate_popup)   (GguHistoryView *self,
-                                 GtkTreePath    *path,
-                                 GtkTreeIter    *iter,
-                                 GtkMenu        *menu);
+  GguTreeViewClass parent_class;
 };
 
 

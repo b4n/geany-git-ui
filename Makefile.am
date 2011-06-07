@@ -37,6 +37,8 @@ ggu_plugin_sources  = src/ggu-auto-link-label.c \
                       src/ggu-panel.h \
                       src/ggu-plugin.c \
                       src/ggu-plugin.h \
+                      src/ggu-tree-view.c \
+                      src/ggu-tree-view.h \
                       src/ggu-wrap-label.c \
                       src/ggu-wrap-label.h
 

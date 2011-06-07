@@ -291,8 +291,8 @@ ggu_panel_init (GguPanel *self)
   gtk_box_pack_start (GTK_BOX (vbox), scrolled, TRUE, TRUE, 0);
   self->priv->history_store = ggu_history_store_new ();
   self->priv->history_view = ggu_history_view_new (self->priv->history_store);
-  g_signal_connect (self->priv->history_view, "populate-popup",
-                    G_CALLBACK (history_view_populate_popup_handler), self);
+  g_signal_connect_after (self->priv->history_view, "populate-popup",
+                          G_CALLBACK (history_view_populate_popup_handler), self);
   gtk_container_add (GTK_CONTAINER (scrolled), self->priv->history_view);
   selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->history_view));
   g_signal_connect (selection, "changed",
@@ -511,6 +511,8 @@ history_view_populate_popup_handler (GguHistoryView *view,
                                  gtk_image_new_from_stock (GTK_STOCK_REFRESH,
                                                            GTK_ICON_SIZE_MENU));
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+  
+  gtk_widget_show_all (GTK_WIDGET (menu));
 }
 
 static void
