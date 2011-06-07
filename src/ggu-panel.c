@@ -90,13 +90,6 @@ enum
   BRANCH_N_COLUMNS
 };
 
-enum
-{
-  HISTORY_ENTRY,
-  
-  HISTORY_N_COLUMNS
-};
-
 struct _GguPanelPrivate
 {
   GeanyDocument    *doc;
@@ -530,13 +523,12 @@ history_view_selection_changed_handler (GtkTreeSelection *selection,
   if (gtk_tree_selection_get_selected (selection, &model, &iter)) {
     GguGitLogEntry *entry;
     
-    gtk_tree_model_get (model, &iter, HISTORY_ENTRY, &entry, -1);
+    entry = ggu_history_store_get_entry (GGU_HISTORY_STORE (model), &iter);
     gtk_label_set_text (GTK_LABEL (self->priv->commit_hash), entry->hash);
     gtk_label_set_text (GTK_LABEL (self->priv->commit_date), entry->date);
     gtk_label_set_text (GTK_LABEL (self->priv->commit_author), entry->author);
     gtk_text_buffer_set_text (self->priv->commit_message_buffer,
                               entry->details, -1);
-    ggu_git_log_entry_unref (entry);
     
     gtk_widget_show (self->priv->commit_container);
   } else {
