@@ -20,12 +20,14 @@
 
 #include "ggu-git-show.h"
 
+#include <stdlib.h>
 #include <glib.h>
 #include <glib-object.h>
 #include <gio/gio.h>
 
 #include "ggu-glib-compat.h"
 #include "ggu-git.h"
+#include "ggu-git-files-changed-entry.h"
 
 
 struct _GguGitShowPrivate
@@ -265,6 +267,187 @@ const gchar *
 ggu_git_show_show_finish (GguGitShow   *self,
                           GAsyncResult *result,
                           GError      **error)
+{
+  return _ggu_git_run_finish (GGU_GIT (self), result, error);
+}
+
+
+/* list files changed */
+
+static void
+files_changed_entry_list_unref (GList *entries)
+{
+  g_list_free_full (entries,
+                    (GDestroyNotify) ggu_git_files_changed_entry_unref);
+}
+
+static inline gboolean
+unescape_filename (gchar              *filename,
+                   GSimpleAsyncResult *result)
+{
+  if (*filename == '"') {
+    guint i, j;
+    
+    for (i = 1, j = 0;
+         filename[i] != 0 && (filename[i] != '"' || filename[i+1] != 0);
+         i++) {
+      if (filename[i] == '\\') {
+        i++; /* skip backslash */
+        switch (filename[i]) {
+          case 'n':   filename[j++] = '\n'; break;
+          case 't':   filename[j++] = '\t'; break;
+          case '"':
+          case '\\':  filename[j++] = filename[i]; break;
+          
+          default:
+            /* should not happen */
+            g_warning ("unexpected escaping");
+            i--;
+            filename[j++] = filename[i];
+        }
+      } else {
+        filename[j++] = filename[i];
+      }
+    }
+    if (filename[i] != '"') {
+      g_simple_async_result_set_error (result, GGU_GIT_ERROR,
+                                       GGU_GIT_ERROR_INVALID_RESULT,
+                                       "Unexpected end of line");
+      return FALSE;
+    }
+    filename[j] = 0;
+  }
+  
+  return TRUE;
+}
+
+static inline gboolean
+parse_changes_count (const gchar        *changes,
+                     guint              *n_,
+                     GSimpleAsyncResult *result)
+{
+  if (changes[0] == '-' && changes[1] == 0) {
+    *n_ = 0u;
+  } else {
+    gulong  n;
+    gchar  *end;
+    
+    n = strtoul (changes, &end, 10);
+    if (*end != 0) {
+      g_simple_async_result_set_error (result, GGU_GIT_ERROR,
+                                       GGU_GIT_ERROR_INVALID_RESULT,
+                                       "Invalid change count \"%s\"", changes);
+      return FALSE;
+    } else if (n > G_MAXUINT) {
+      g_warning ("value too big, truncating");
+    }
+    *n_ = (guint) n;
+  }
+  
+  return TRUE;
+}
+
+static void
+ggu_git_list_files_changed_parse_output (GguGit             *obj,
+                                         const gchar        *output,
+                                         GSimpleAsyncResult *result,
+                                         GCancellable       *cancellable)
+{
+  /* Formats:
+   * 
+   * n_added <\t> n_removed <\t> file-name
+   * n_added <\t> n_removed <\t> "file-name-with-special-chars"
+   * -       <\t> -         <\t> binary-file-name
+   * -       <\t> -         <\t> "binary-file-name-with-special-chars"
+   */
+  /* FIXME: would be cool to have the output length, so we sould use
+   * 0-terminated lines, thus no weird filename convention */
+  
+  gchar **lines;
+  guint   i;
+  GList  *entries = NULL;
+  
+  lines = g_strsplit (output, "\n", -1);
+  for (i = 0; lines[i] != NULL; i++) {
+    gchar **line;
+    guint   n_added;
+    guint   n_removed;
+    GError *error = NULL;
+    
+    if (g_cancellable_set_error_if_cancelled (cancellable, &error)) {
+      g_simple_async_result_take_error (result, error);
+      break;
+    }
+    
+    /* empty line, skip it */
+    if (lines[i][0] == 0) {
+      continue;
+    }
+    
+    line = g_strsplit (lines[i], "\t", 3);
+    if (! line[0] || ! line[1] || ! line[2]) {
+      g_simple_async_result_set_error (result, GGU_GIT_ERROR,
+                                       GGU_GIT_ERROR_INVALID_RESULT,
+                                       "Invalid output");
+    } else if (parse_changes_count (line[0], &n_added, result) &&
+               parse_changes_count (line[1], &n_removed, result) &&
+               unescape_filename (line[2], result)) {
+      GguGitFilesChangedEntry *entry = NULL;
+      
+      entry = ggu_git_files_changed_entry_new ();
+      entry->added    = n_added;
+      entry->removed  = n_removed;
+      entry->path     = line[2];
+      
+      entries = g_list_prepend (entries, entry);
+      
+      /* avoid freeing the filename. It's not a problem to set it to null
+       * since it is the last strv entry */
+      line[2] = NULL;
+    }
+    g_strfreev (line);
+  }
+  g_strfreev (lines);
+  entries = g_list_reverse (entries);
+  g_simple_async_result_set_op_res_gpointer (result, entries,
+                                             (GDestroyNotify) files_changed_entry_list_unref);
+}
+
+void
+ggu_git_list_files_changed_async (GguGitShow          *self,
+                                  const gchar         *dir,
+                                  const gchar         *rev,
+                                  GCancellable        *cancellable,
+                                  GAsyncReadyCallback  callback,
+                                  gpointer             user_data)
+{
+  const gchar *argv[] = {
+    "git",
+    "show",
+    "--numstat",
+    "--format=%N",
+    NULL, /* placeholder for rev */
+    NULL
+  };
+  
+  argv[G_N_ELEMENTS (argv) - 2] = rev;
+  
+  g_object_set (self,
+                "dir", dir,
+                "rev", rev,
+                "file", NULL,
+                "diff", FALSE,
+                NULL);
+  
+  _ggu_git_run_async (GGU_GIT (self), (gchar **) argv,
+                      ggu_git_list_files_changed_parse_output,
+                      G_PRIORITY_DEFAULT, cancellable, callback, user_data);
+}
+
+GList *
+ggu_git_list_files_changed_finish (GguGitShow    *self,
+                                   GAsyncResult  *result,
+                                   GError       **error)
 {
   return _ggu_git_run_finish (GGU_GIT (self), result, error);
 }
