@@ -30,9 +30,12 @@
 #include "git-lib/ggu-git-utils.h"
 #include "git-lib/ggu-git-log.h"
 #include "git-lib/ggu-git-log-entry.h"
+#include "git-lib/ggu-git-files-changed-entry.h"
 #include "git-lib/ggu-git-branch.h"
 #include "git-lib/ggu-git-show.h"
 #include "ggu-auto-link-label.h"
+#include "ggu-files-changed-store.h"
+#include "ggu-files-changed-view.h"
 #include "ggu-history-store.h"
 #include "ggu-history-view.h"
 #include "ggu-message-box.h"
@@ -104,6 +107,8 @@ struct _GguPanelPrivate
   GCancellable     *branch_cancellable;
   GguGitShow       *shower;
   GCancellable     *show_cancellable;
+  GguGitShow       *changed_files_lister;
+  GCancellable     *changed_files_list_cancellable;
   
   GtkWidget        *loading_spinner;
   GtkWidget        *file_path; /* FIXME: use a custom widget that shows repo root/current path */
@@ -120,31 +125,44 @@ struct _GguPanelPrivate
   GtkWidget        *commit_date;
   GtkWidget        *commit_author;
   GtkTextBuffer    *commit_message_buffer;
+  GguFilesChangedStore *commit_files_changed_store;
+  GtkWidget        *commit_files_changed_view;
   
   /* message displaying */
   GtkWidget        *message_area;
 };
 
 
-static void       ggu_panel_loading_push                  (GguPanel *self);
-static void       ggu_panel_loading_pop                   (GguPanel *self);
-static void       ggu_panel_show_rev                      (GguPanel *self,
-                                                           const gchar   *rev,
-                                                           gboolean       diff,
-                                                           GeanyDocument *doc);
-static void       ggu_panel_update_history                (GguPanel    *self,
-                                                           const gchar *rev);
-static void       ggu_panel_update_branch_list            (GguPanel *self);
+static void       ggu_panel_loading_push                    (GguPanel *self);
+static void       ggu_panel_loading_pop                     (GguPanel *self);
+static void       ggu_panel_show_rev                        (GguPanel *self,
+                                                             const gchar   *rev,
+                                                             gboolean       diff,
+                                                             GeanyDocument *doc);
+static void       ggu_panel_update_history                  (GguPanel    *self,
+                                                             const gchar *rev);
+static void       ggu_panel_update_branch_list              (GguPanel *self);
+static void       ggu_panel_update_changed_files_list       (GguPanel    *self,
+                                                             const gchar *rev);
 
-static void       history_view_selection_changed_handler  (GtkTreeSelection *selection,
-                                                           GguPanel         *self);
-static void       history_view_populate_popup_handler     (GguHistoryView *view,
-                                                           GtkTreePath    *path,
-                                                           GtkTreeIter    *iter,
-                                                           GtkMenu        *menu,
-                                                           GguPanel       *self);
-static void       branch_combo_changed_handler            (GtkComboBox *combo,
-                                                           GguPanel    *self);
+static void       history_view_selection_changed_handler    (GtkTreeSelection *selection,
+                                                             GguPanel         *self);
+static void       history_view_populate_popup_handler       (GguHistoryView *view,
+                                                             GtkTreePath    *path,
+                                                             GtkTreeIter    *iter,
+                                                             GtkMenu        *menu,
+                                                             GguPanel       *self);
+static void       branch_combo_changed_handler              (GtkComboBox *combo,
+                                                             GguPanel    *self);
+static void       files_changed_view_populate_popup_handler (GguFilesChangedView *view,
+                                                             GtkTreePath         *path,
+                                                             GtkTreeIter         *iter,
+                                                             GtkMenu             *menu,
+                                                             GguPanel            *self);
+static void       files_changed_view_row_activated_handler  (GtkTreeView       *view,
+                                                             GtkTreePath       *path,
+                                                             GtkTreeViewColumn *column,
+                                                             GguPanel          *self);
 
 
 G_DEFINE_TYPE (GguPanel,
@@ -185,6 +203,14 @@ ggu_panel_finalize (GObject *object)
     g_object_unref (self->priv->show_cancellable);
     self->priv->show_cancellable = NULL;
   }
+  if (self->priv->changed_files_lister) {
+    g_object_unref (self->priv->changed_files_lister);
+    self->priv->changed_files_lister = NULL;
+  }
+  if (self->priv->changed_files_list_cancellable) {
+    g_object_unref (self->priv->changed_files_list_cancellable);
+    self->priv->changed_files_list_cancellable = NULL;
+  }
   
   G_OBJECT_CLASS (ggu_panel_parent_class)->finalize (object);
 }
@@ -212,6 +238,7 @@ ggu_panel_init (GguPanel *self)
   GtkWidget          *branch_box;
   GtkWidget          *table;
   GtkWidget          *scrolled;
+  GtkWidget          *notebook;
   GtkWidget          *label;
   GtkCellRenderer    *cell;
   GtkTreeSelection   *selection;
@@ -231,6 +258,8 @@ ggu_panel_init (GguPanel *self)
   self->priv->branch_cancellable = g_cancellable_new ();
   self->priv->shower = NULL;
   self->priv->show_cancellable = g_cancellable_new ();
+  self->priv->changed_files_lister = NULL;
+  self->priv->changed_files_list_cancellable = g_cancellable_new ();
   
   /* file path and spinner */
   hbox = gtk_hbox_new (FALSE, 6);
@@ -327,14 +356,21 @@ ggu_panel_init (GguPanel *self)
   gtk_table_attach (GTK_TABLE (table), self->priv->commit_author, 1, 2, 2, 3,
                     GTK_FILL | GTK_EXPAND, GTK_FILL, 0, 0);
   
+  /* commit details notebook (message, changes, etc.) */
+  notebook = g_object_new (GTK_TYPE_NOTEBOOK,
+                           "tab-pos", GTK_POS_BOTTOM,
+                           NULL);
+  gtk_box_pack_start (GTK_BOX (self->priv->commit_container), notebook,
+                      TRUE, TRUE, 0);
+  
   /* commit message */
   scrolled = g_object_new (GTK_TYPE_SCROLLED_WINDOW,
                            "hscrollbar-policy", GTK_POLICY_AUTOMATIC,
                            "vscrollbar-policy", GTK_POLICY_AUTOMATIC,
                            "shadow-type", GTK_SHADOW_IN,
                            NULL);
-  gtk_box_pack_start (GTK_BOX (self->priv->commit_container), scrolled,
-                      TRUE, TRUE, 0);
+  gtk_notebook_append_page (GTK_NOTEBOOK (notebook),
+                            scrolled, gtk_label_new (_("Message")));
   self->priv->commit_message_buffer = gtk_text_buffer_new (NULL);
   commit_message_view = g_object_new (GTK_TYPE_TEXT_VIEW, 
                                       "buffer", self->priv->commit_message_buffer,
@@ -342,6 +378,23 @@ ggu_panel_init (GguPanel *self)
                                       "wrap-mode", GTK_WRAP_WORD,
                                       NULL);
   gtk_container_add (GTK_CONTAINER (scrolled), commit_message_view);
+  
+  /* the files changed */
+  scrolled = g_object_new (GTK_TYPE_SCROLLED_WINDOW,
+                           "hscrollbar-policy", GTK_POLICY_AUTOMATIC,
+                           "vscrollbar-policy", GTK_POLICY_AUTOMATIC,
+                           "shadow-type", GTK_SHADOW_IN,
+                           NULL);
+  gtk_notebook_append_page (GTK_NOTEBOOK (notebook),
+                            scrolled, gtk_label_new (_("Changes")));
+  self->priv->commit_files_changed_store = ggu_files_changed_store_new ();
+  self->priv->commit_files_changed_view = ggu_files_changed_view_new (self->priv->commit_files_changed_store);
+  g_signal_connect (self->priv->commit_files_changed_view, "populate-popup",
+                    G_CALLBACK (files_changed_view_populate_popup_handler), self);
+  g_signal_connect (self->priv->commit_files_changed_view, "row-activated",
+                    G_CALLBACK (files_changed_view_row_activated_handler), self);
+  gtk_container_add (GTK_CONTAINER (scrolled),
+                     self->priv->commit_files_changed_view);
   
   /* info bar */
   /*self->priv->message_area = gtk_vbox_new (FALSE, 0);*/
@@ -526,6 +579,9 @@ history_view_selection_changed_handler (GtkTreeSelection *selection,
     GguGitLogEntry *entry;
     
     entry = ggu_history_store_get_entry (GGU_HISTORY_STORE (model), &iter);
+    
+    ggu_panel_update_changed_files_list (self, entry->hash);
+    
     gtk_label_set_text (GTK_LABEL (self->priv->commit_hash), entry->hash);
     gtk_label_set_text (GTK_LABEL (self->priv->commit_date), entry->date);
     gtk_label_set_text (GTK_LABEL (self->priv->commit_author), entry->author);
@@ -562,6 +618,88 @@ branch_combo_changed_handler (GtkComboBox *combo,
     }
     g_free (branch);
   }
+}
+
+
+#define FILES_CHANGED_ENTRY_KEY "ggu-files-changed-entry"
+
+static void
+files_changed_view_use_colors_activate_handler (GtkMenuItem         *item,
+                                                GguFilesChangedView *view)
+{
+  ggu_files_changed_view_set_colorize_changes (view,
+                                               gtk_check_menu_item_get_active (GTK_CHECK_MENU_ITEM (item)));
+}
+
+static void
+files_changed_view_open_activate_handler (GtkMenuItem *item,
+                                          GguPanel    *self)
+{
+  GguGitFilesChangedEntry *entry = g_object_get_data (G_OBJECT (item),
+                                                      FILES_CHANGED_ENTRY_KEY);
+  
+  ggu_panel_open_repository_file (self, entry->path);
+}
+
+static void
+files_changed_view_populate_popup_handler (GguFilesChangedView *view,
+                                           GtkTreePath         *path,
+                                           GtkTreeIter         *iter,
+                                           GtkMenu             *menu,
+                                           GguPanel            *self)
+{
+  GtkWidget                *item;
+  GguGitFilesChangedEntry  *entry = NULL;
+  
+  if (iter) {
+    entry = ggu_files_changed_store_get_entry (self->priv->commit_files_changed_store,
+                                               iter);
+  }
+  
+  /* whether to use colors */
+  item = gtk_check_menu_item_new_with_mnemonic (_("Use colors"));
+  gtk_check_menu_item_set_active (GTK_CHECK_MENU_ITEM (item),
+                                  ggu_files_changed_view_get_colorize_changes (view));
+  g_signal_connect (item, "activate",
+                    G_CALLBACK (files_changed_view_use_colors_activate_handler),
+                    view);
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+  /* <sep> */
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
+  /* open file */
+  item = gtk_image_menu_item_new_with_mnemonic (_("Open"));
+  gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (item),
+                                 gtk_image_new_from_stock (GTK_STOCK_OPEN,
+                                                           GTK_ICON_SIZE_MENU));
+  if (entry) {
+    g_object_set_data_full (G_OBJECT (item),
+                            FILES_CHANGED_ENTRY_KEY, ggu_git_files_changed_entry_ref (entry),
+                            (GDestroyNotify) ggu_git_files_changed_entry_unref);
+    g_signal_connect (item, "activate",
+                      G_CALLBACK (files_changed_view_open_activate_handler),
+                      self);
+  } else {
+    gtk_widget_set_sensitive (item, FALSE);
+  }
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+  /* TODO: maybe add show diff & stuff */
+  
+  gtk_widget_show_all (GTK_WIDGET (menu));
+}
+
+static void
+files_changed_view_row_activated_handler (GtkTreeView       *view,
+                                          GtkTreePath       *path,
+                                          GtkTreeViewColumn *column,
+                                          GguPanel          *self)
+{
+  GtkTreeIter               iter;
+  GguGitFilesChangedEntry  *entry;
+  GguFilesChangedStore     *store = self->priv->commit_files_changed_store;
+  
+  gtk_tree_model_get_iter (GTK_TREE_MODEL (store), &iter, path);
+  entry = ggu_files_changed_store_get_entry (store, &iter);
+  ggu_panel_open_repository_file (self, entry->path);
 }
 
 static void
@@ -803,6 +941,83 @@ ggu_panel_update_branch_list (GguPanel *self)
                              self->priv->branch_cancellable,
                              ggu_panel_update_branch_list_async_finished_handler,
                              self);
+}
+
+static void
+ggu_panel_update_changed_files_list_async_finished_handler (GObject      *object,
+                                                            GAsyncResult *result,
+                                                            gpointer      data)
+{
+  GguPanel *self = data;
+  GList    *entries;
+  GError   *error = NULL;
+  
+  /* unconditionally pop our loading ref */
+  ggu_panel_loading_pop (self);
+  
+  /* make sure it's the result of the last operation and not a previous
+   * (possibly cancelled) one that terminates maybe after */
+  if (GGU_GIT_SHOW (object) != self->priv->changed_files_lister) {
+    return;
+  }
+  
+  entries = ggu_git_list_files_changed_finish (GGU_GIT_SHOW (object),
+                                               result, &error);
+  if (error) {
+    if (error->domain != G_IO_ERROR || error->code != G_IO_ERROR_CANCELLED) {
+      ggu_panel_show_message (self, GTK_MESSAGE_ERROR,
+                              "Files changed list failed",
+                              "%s", error->message);
+    }
+    g_error_free (error);
+  } else {
+    for (; entries; entries = entries->next) {
+      ggu_files_changed_store_append (self->priv->commit_files_changed_store,
+                                      entries->data);
+    }
+  }
+}
+
+static void
+ggu_panel_update_changed_files_list (GguPanel    *self,
+                                     const gchar *rev)
+{
+  g_cancellable_cancel (self->priv->changed_files_list_cancellable);
+  gtk_list_store_clear (GTK_LIST_STORE (self->priv->commit_files_changed_store));
+  
+  if (self->priv->changed_files_lister) {
+    g_object_unref (self->priv->changed_files_lister);
+  }
+  self->priv->changed_files_lister = ggu_git_show_new ();
+  g_cancellable_reset (self->priv->changed_files_list_cancellable);
+  ggu_panel_loading_push (self);
+  ggu_git_list_files_changed_async (self->priv->changed_files_lister,
+                                    self->priv->root,
+                                    rev,
+                                    self->priv->changed_files_list_cancellable,
+                                    ggu_panel_update_changed_files_list_async_finished_handler,
+                                    self);
+}
+
+gboolean
+ggu_panel_open_repository_file (GguPanel    *self,
+                                const gchar *intern_path)
+{
+  gboolean  success;
+  gchar    *path;
+  gchar    *locale_path;
+  
+  path = g_strconcat (self->priv->root, intern_path, NULL);
+  locale_path = g_filename_from_utf8 (path, -1, NULL, NULL, NULL);
+  if (! locale_path) {
+    locale_path = path;
+  } else {
+    g_free (path);
+  }
+  success = document_open_file (locale_path, FALSE, NULL, NULL) != NULL;
+  g_free (locale_path);
+  
+  return success;
 }
 
 void

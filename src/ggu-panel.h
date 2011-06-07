@@ -59,6 +59,8 @@ GType         ggu_panel_get_type                      (void) G_GNUC_CONST;
 GtkWidget    *ggu_panel_new                           (void);
 void          ggu_panel_set_document                  (GguPanel      *self,
                                                        GeanyDocument *doc);
+gboolean      ggu_panel_open_repository_file          (GguPanel    *self,
+                                                       const gchar *intern_path);
 
 
 G_END_DECLS
