@@ -55,6 +55,7 @@ void
 ggu_git_files_changed_entry_unref (GguGitFilesChangedEntry *entry)
 {
   if (g_atomic_int_dec_and_test (&entry->ref_count)) {
+    g_free (entry->hash);
     g_free (entry->path);
     g_slice_free1 (sizeof *entry, entry);
   }

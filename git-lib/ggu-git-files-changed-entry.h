@@ -36,6 +36,7 @@ struct _GguGitFilesChangedEntry
 {
   gint    ref_count;
   
+  gchar  *hash; /* the revision for which these changes applies */
   gchar  *path;
   guint   added;
   guint   removed;

@@ -363,9 +363,10 @@ ggu_git_list_files_changed_parse_output (GguGit             *obj,
   /* FIXME: would be cool to have the output length, so we sould use
    * 0-terminated lines, thus no weird filename convention */
   
-  gchar **lines;
-  guint   i;
-  GList  *entries = NULL;
+  GguGitShow *self = GGU_GIT_SHOW (obj);
+  gchar     **lines;
+  guint       i;
+  GList      *entries = NULL;
   
   lines = g_strsplit (output, "\n", -1);
   for (i = 0; lines[i] != NULL; i++) {
@@ -395,6 +396,7 @@ ggu_git_list_files_changed_parse_output (GguGit             *obj,
       GguGitFilesChangedEntry *entry = NULL;
       
       entry = ggu_git_files_changed_entry_new ();
+      entry->hash     = g_strdup (self->priv->rev);
       entry->added    = n_added;
       entry->removed  = n_removed;
       entry->path     = line[2];
