@@ -480,11 +480,11 @@ replace_content_activate_handler (GtkMenuItem *item,
 }
 
 static GtkWidget *
-create_popup_menu_item (GguPanel       *self,
-                        const gchar    *mnemonic,
-                        GguGitLogEntry *entry,
-                        void          (*callback) (GtkMenuItem *item,
-                                                   GguPanel    *self))
+history_view_create_popup_menu_item (GguPanel       *self,
+                                     const gchar    *mnemonic,
+                                     GguGitLogEntry *entry,
+                                     void          (*callback) (GtkMenuItem *item,
+                                                                GguPanel    *self))
 {
   GtkWidget *item;
   
@@ -518,18 +518,21 @@ history_view_populate_popup_handler (GguHistoryView *view,
   /* <sep> */
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
   /* show diff */
-  item = create_popup_menu_item (self, _("Show _diff"), entry,
-                                 show_diff_activate_handler);
+  item = history_view_create_popup_menu_item (self, _("Show _diff"), entry,
+                                              show_diff_activate_handler);
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
   /* shiw content */
-  item = create_popup_menu_item (self, _("Show _full content"), entry,
-                                 show_content_activate_handler);
+  item = history_view_create_popup_menu_item (self, _("Show _full content"),
+                                              entry,
+                                              show_content_activate_handler);
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
   /* <sep> */
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
   /* replace content */
-  item = create_popup_menu_item (self, _("_Replace document content"), entry,
-                                 replace_content_activate_handler);
+  item = history_view_create_popup_menu_item (self,
+                                              _("_Replace document content"),
+                                              entry,
+                                              replace_content_activate_handler);
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
   /* <sep> */
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
@@ -607,6 +610,26 @@ files_changed_view_use_colors_activate_handler (GtkMenuItem         *item,
 }
 
 static void
+files_changed_view_show_diff_activate_handler (GtkMenuItem *item,
+                                               GguPanel    *self)
+{
+  GguGitFilesChangedEntry *entry = g_object_get_data (G_OBJECT (item),
+                                                      FILES_CHANGED_ENTRY_KEY);
+  
+  ggu_panel_show_rev (self, entry->path, entry->hash, TRUE, NULL);
+}
+
+static void
+files_changed_view_show_content_activate_handler (GtkMenuItem *item,
+                                                  GguPanel    *self)
+{
+  GguGitFilesChangedEntry *entry = g_object_get_data (G_OBJECT (item),
+                                                      FILES_CHANGED_ENTRY_KEY);
+  
+  ggu_panel_show_rev (self, entry->path, entry->hash, FALSE, NULL);
+}
+
+static void
 files_changed_view_open_activate_handler (GtkMenuItem *item,
                                           GguPanel    *self)
 {
@@ -614,6 +637,28 @@ files_changed_view_open_activate_handler (GtkMenuItem *item,
                                                       FILES_CHANGED_ENTRY_KEY);
   
   ggu_panel_open_repository_file (self, entry->path);
+}
+
+static GtkWidget *
+files_changed_view_create_popup_menu_item (GguPanel                *self,
+                                           const gchar             *mnemonic,
+                                           GguGitFilesChangedEntry *entry,
+                                           void                   (*callback) (GtkMenuItem *item,
+                                                                               GguPanel    *self))
+{
+  GtkWidget *item;
+  
+  item = gtk_image_menu_item_new_with_mnemonic (mnemonic);
+  if (! entry) {
+    gtk_widget_set_sensitive (item, FALSE);
+  } else {
+    g_object_set_data_full (G_OBJECT (item), FILES_CHANGED_ENTRY_KEY,
+                            ggu_git_files_changed_entry_ref (entry),
+                            (GDestroyNotify) ggu_git_files_changed_entry_unref);
+    g_signal_connect (item, "activate", G_CALLBACK (callback), self);
+  }
+  
+  return item;
 }
 
 static void
@@ -641,23 +686,26 @@ files_changed_view_populate_popup_handler (GguFilesChangedView *view,
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
   /* <sep> */
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
+  /* show diff */
+  item = files_changed_view_create_popup_menu_item (self, _("Show _diff"),
+                                                    entry,
+                                                    files_changed_view_show_diff_activate_handler);
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+  /* show diff */
+  item = files_changed_view_create_popup_menu_item (self, _("Show _full content"),
+                                                    entry,
+                                                    files_changed_view_show_content_activate_handler);
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
+  /* <sep> */
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
   /* open file */
-  item = gtk_image_menu_item_new_with_mnemonic (_("Open"));
+  item = files_changed_view_create_popup_menu_item (self, _("_Open file"),
+                                                    entry,
+                                                    files_changed_view_open_activate_handler);
   gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (item),
                                  gtk_image_new_from_stock (GTK_STOCK_OPEN,
                                                            GTK_ICON_SIZE_MENU));
-  if (entry) {
-    g_object_set_data_full (G_OBJECT (item),
-                            FILES_CHANGED_ENTRY_KEY, ggu_git_files_changed_entry_ref (entry),
-                            (GDestroyNotify) ggu_git_files_changed_entry_unref);
-    g_signal_connect (item, "activate",
-                      G_CALLBACK (files_changed_view_open_activate_handler),
-                      self);
-  } else {
-    gtk_widget_set_sensitive (item, FALSE);
-  }
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-  /* TODO: maybe add show diff & stuff */
   
   gtk_widget_show_all (GTK_WIDGET (menu));
 }
@@ -674,7 +722,7 @@ files_changed_view_row_activated_handler (GtkTreeView       *view,
   
   gtk_tree_model_get_iter (GTK_TREE_MODEL (store), &iter, path);
   entry = ggu_files_changed_store_get_entry (store, &iter);
-  ggu_panel_open_repository_file (self, entry->path);
+  ggu_panel_show_rev (self, entry->path, entry->hash, TRUE, NULL);
 }
 
 static void
