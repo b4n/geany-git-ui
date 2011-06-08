@@ -602,14 +602,6 @@ branch_combo_changed_handler (GtkComboBox *combo,
 #define FILES_CHANGED_ENTRY_KEY "ggu-files-changed-entry"
 
 static void
-files_changed_view_use_colors_activate_handler (GtkMenuItem         *item,
-                                                GguFilesChangedView *view)
-{
-  ggu_files_changed_view_set_colorize_changes (view,
-                                               gtk_check_menu_item_get_active (GTK_CHECK_MENU_ITEM (item)));
-}
-
-static void
 files_changed_view_show_diff_activate_handler (GtkMenuItem *item,
                                                GguPanel    *self)
 {
@@ -676,16 +668,6 @@ files_changed_view_populate_popup_handler (GguFilesChangedView *view,
                                                iter);
   }
   
-  /* whether to use colors */
-  item = gtk_check_menu_item_new_with_mnemonic (_("Use colors"));
-  gtk_check_menu_item_set_active (GTK_CHECK_MENU_ITEM (item),
-                                  ggu_files_changed_view_get_colorize_changes (view));
-  g_signal_connect (item, "activate",
-                    G_CALLBACK (files_changed_view_use_colors_activate_handler),
-                    view);
-  gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
-  /* <sep> */
-  gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
   /* show diff */
   item = files_changed_view_create_popup_menu_item (self, _("Show _diff"),
                                                     entry,
