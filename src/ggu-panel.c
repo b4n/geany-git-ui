@@ -546,6 +546,28 @@ history_view_populate_popup_handler (GguHistoryView *view,
   gtk_widget_show_all (GTK_WIDGET (menu));
 }
 
+/* GSourceFunc to make sure a GtkTreeView's selection is visible.
+ * This is useful if you did something that may have changed what the view
+ * displays (e.g. reduce the space allocated for the view) and you want not to
+ * hide the selection. */
+static gboolean
+ensure_tree_selection_visible_callback (gpointer view)
+{
+  GtkTreeSelection *selection = gtk_tree_view_get_selection (view);
+  GtkTreeModel     *model;
+  GtkTreeIter       iter;
+  
+  if (gtk_tree_selection_get_selected (selection, &model, &iter)) {
+    GtkTreePath *path;
+    
+    path = gtk_tree_model_get_path (model, &iter);
+    gtk_tree_view_scroll_to_cell (view, path, NULL, FALSE, 0.0, 0.0);
+    gtk_tree_path_free (path);
+  }
+  
+  return FALSE;
+}
+
 static void
 history_view_selection_changed_handler (GtkTreeSelection *selection,
                                         GguPanel         *self)
@@ -566,7 +588,11 @@ history_view_selection_changed_handler (GtkTreeSelection *selection,
     gtk_text_buffer_set_text (self->priv->commit_message_buffer,
                               entry->details, -1);
     
-    gtk_widget_show (self->priv->commit_container);
+    if (! gtk_widget_get_visible (self->priv->commit_container)) {
+      gtk_widget_show (self->priv->commit_container);
+      g_idle_add (ensure_tree_selection_visible_callback,
+                  self->priv->history_view);
+    }
   } else {
     gtk_widget_hide (self->priv->commit_container);
   }
