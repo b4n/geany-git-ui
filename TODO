@@ -1,0 +1,6 @@
+ * Show added/modified lines in the editor's margin
+ * enumerate things in packets? e.g. log by packs of 10? would make
+   the UI more reactive, not sure of the loss
+ * monitor Git changes (e.g. update if externally changed)
+ * add a job scheduler to take care of aborted jobs, etc.
+ * cleanup! (mostly in git-lib and src/ggu-panel.c)
