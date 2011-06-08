@@ -136,7 +136,8 @@ struct _GguPanelPrivate
 
 static void       ggu_panel_loading_push                    (GguPanel *self);
 static void       ggu_panel_loading_pop                     (GguPanel *self);
-static void       ggu_panel_show_rev                        (GguPanel *self,
+static void       ggu_panel_show_rev                        (GguPanel      *self,
+                                                             const gchar   *path,
                                                              const gchar   *rev,
                                                              gboolean       diff,
                                                              GeanyDocument *doc);
@@ -454,7 +455,7 @@ show_diff_activate_handler (GtkMenuItem *item,
   GguGitLogEntry *entry;
   
   entry = g_object_get_data (G_OBJECT (item), LOG_ENTRY_KEY);
-  ggu_panel_show_rev (self, entry->hash, TRUE, NULL);
+  ggu_panel_show_rev (self, self->priv->path, entry->hash, TRUE, NULL);
 }
 
 static void
@@ -464,7 +465,7 @@ show_content_activate_handler (GtkMenuItem *item,
   GguGitLogEntry *entry;
   
   entry = g_object_get_data (G_OBJECT (item), LOG_ENTRY_KEY);
-  ggu_panel_show_rev (self, entry->hash, FALSE, NULL);
+  ggu_panel_show_rev (self, self->priv->path, entry->hash, FALSE, NULL);
 }
 
 static void
@@ -474,7 +475,8 @@ replace_content_activate_handler (GtkMenuItem *item,
   GguGitLogEntry *entry;
   
   entry = g_object_get_data (G_OBJECT (item), LOG_ENTRY_KEY);
-  ggu_panel_show_rev (self, entry->hash, FALSE, self->priv->doc);
+  ggu_panel_show_rev (self, self->priv->path, entry->hash, FALSE,
+                      self->priv->doc);
 }
 
 static GtkWidget *
@@ -750,6 +752,8 @@ ggu_panel_show_rev_async_finished_handler (GObject      *object,
     GeanyDocument *doc;
     gboolean       diff;
     gchar         *rev;
+    gchar         *path;
+    gchar         *filename;
     gchar         *document_name;
     GeanyFiletype *ft = NULL;
     
@@ -757,15 +761,15 @@ ggu_panel_show_rev_async_finished_handler (GObject      *object,
     g_return_if_fail (DOC_VALID (self->priv->doc));
     g_return_if_fail (doc == NULL || DOC_VALID (doc));
     
-    g_object_get (object, "diff", &diff, "rev", &rev, NULL);
+    g_object_get (object, "diff", &diff, "rev", &rev, "file", &path, NULL);
+    filename = g_path_get_basename (path);
     if (diff) {
       ft = filetypes[GEANY_FILETYPES_DIFF];
       document_name = g_strdup_printf (_("Diff of %s at revision %.7s"),
-                                       self->priv->doc->file_name, rev);
+                                       filename, rev);
     } else {
       ft = self->priv->doc->file_type;
-      document_name = g_strdup_printf (_("%s at revision %.7s"),
-                                       self->priv->doc->file_name, rev);
+      document_name = g_strdup_printf (_("%s at revision %.7s"), filename, rev);
     }
     
     if (! doc) {
@@ -777,12 +781,15 @@ ggu_panel_show_rev_async_finished_handler (GObject      *object,
     //sci_set_readonly (doc->editor->sci, TRUE);
     
     g_free (rev);
+    g_free (path);
+    g_free (filename);
     g_free (document_name);
   }
 }
 
 static void
 ggu_panel_show_rev (GguPanel       *self,
+                    const gchar    *path,
                     const gchar    *rev,
                     gboolean        diff,
                     GeanyDocument  *doc)
@@ -794,7 +801,7 @@ ggu_panel_show_rev (GguPanel       *self,
   g_cancellable_reset (self->priv->show_cancellable);
   ggu_panel_loading_push (self);
   ggu_git_show_show_async (self->priv->shower,
-                           self->priv->root, rev, self->priv->path, diff,
+                           self->priv->root, rev, path, diff,
                            self->priv->show_cancellable,
                            ggu_panel_show_rev_async_finished_handler, self);
 }
