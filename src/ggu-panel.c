@@ -26,6 +26,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "ggu-utils.h"
 #include "ggu-plugin.h"
 #include "git-lib/ggu-git-utils.h"
 #include "git-lib/ggu-git-log.h"
@@ -175,42 +176,16 @@ ggu_panel_finalize (GObject *object)
 {
   GguPanel *self = GGU_PANEL (object);
   
-  g_free (self->priv->root);
-  self->priv->root = NULL;
-  g_free (self->priv->path);
-  self->priv->path = NULL;
-  if (self->priv->logger) {
-    g_object_unref (self->priv->logger);
-    self->priv->logger = NULL;
-  }
-  if (self->priv->log_cancellable) {
-    g_object_unref (self->priv->log_cancellable);
-    self->priv->log_cancellable = NULL;
-  }
-  if (self->priv->brancher) {
-    g_object_unref (self->priv->brancher);
-    self->priv->brancher = NULL;
-  }
-  if (self->priv->branch_cancellable) {
-    g_object_unref (self->priv->branch_cancellable);
-    self->priv->branch_cancellable = NULL;
-  }
-  if (self->priv->shower) {
-    g_object_unref (self->priv->shower);
-    self->priv->shower = NULL;
-  }
-  if (self->priv->show_cancellable) {
-    g_object_unref (self->priv->show_cancellable);
-    self->priv->show_cancellable = NULL;
-  }
-  if (self->priv->changed_files_lister) {
-    g_object_unref (self->priv->changed_files_lister);
-    self->priv->changed_files_lister = NULL;
-  }
-  if (self->priv->changed_files_list_cancellable) {
-    g_object_unref (self->priv->changed_files_list_cancellable);
-    self->priv->changed_files_list_cancellable = NULL;
-  }
+  GGU_USPTR (self->priv->root);
+  GGU_USPTR (self->priv->path);
+  GGU_USOPTR (self->priv->logger);
+  GGU_USOPTR (self->priv->log_cancellable);
+  GGU_USOPTR (self->priv->brancher);
+  GGU_USOPTR (self->priv->branch_cancellable);
+  GGU_USOPTR (self->priv->shower);
+  GGU_USOPTR (self->priv->show_cancellable);
+  GGU_USOPTR (self->priv->changed_files_lister);
+  GGU_USOPTR (self->priv->changed_files_list_cancellable);
   
   G_OBJECT_CLASS (ggu_panel_parent_class)->finalize (object);
 }
@@ -449,10 +424,8 @@ ggu_panel_set_git_path (GguPanel    *self,
 {
   gchar *tooltip = NULL;
   
-  g_free (self->priv->root);
-  self->priv->root = g_strdup (root);
-  g_free (self->priv->path);
-  self->priv->path = g_strdup (path);
+  GGU_SPTR (self->priv->root, g_strdup (root));
+  GGU_SPTR (self->priv->path, g_strdup (path));
   
   if (! path) {
     path = _("(none)");
@@ -816,10 +789,7 @@ ggu_panel_show_rev (GguPanel       *self,
 {
   g_cancellable_cancel (self->priv->show_cancellable);
   
-  if (self->priv->shower) {
-    g_object_unref (self->priv->shower);
-  }
-  self->priv->shower = ggu_git_show_new ();
+  GGU_SOPTR (self->priv->shower, ggu_git_show_new ());
   g_object_set_data (G_OBJECT (self->priv->shower), DOCUMENT_KEY, doc);
   g_cancellable_reset (self->priv->show_cancellable);
   ggu_panel_loading_push (self);
@@ -868,10 +838,7 @@ ggu_panel_update_history (GguPanel    *self,
   g_cancellable_cancel (self->priv->log_cancellable);
   gtk_list_store_clear (GTK_LIST_STORE (self->priv->history_store));
   
-  if (self->priv->logger) {
-    g_object_unref (self->priv->logger);
-  }
-  self->priv->logger = ggu_git_log_new ();
+  GGU_SOPTR (self->priv->logger, ggu_git_log_new ());
   g_cancellable_reset (self->priv->log_cancellable);
   ggu_panel_loading_push (self);
   ggu_git_log_log_async (self->priv->logger,
@@ -931,10 +898,7 @@ ggu_panel_update_branch_list (GguPanel *self)
   g_cancellable_cancel (self->priv->branch_cancellable);
   gtk_list_store_clear (self->priv->branch_store);
   
-  if (self->priv->brancher) {
-    g_object_unref (self->priv->brancher);
-  }
-  self->priv->brancher = ggu_git_branch_new ();
+  GGU_SOPTR (self->priv->brancher, ggu_git_branch_new ());
   g_cancellable_reset (self->priv->branch_cancellable);
   ggu_panel_loading_push (self);
   ggu_git_branch_list_async (self->priv->brancher, self->priv->root,
@@ -985,10 +949,7 @@ ggu_panel_update_changed_files_list (GguPanel    *self,
   g_cancellable_cancel (self->priv->changed_files_list_cancellable);
   gtk_list_store_clear (GTK_LIST_STORE (self->priv->commit_files_changed_store));
   
-  if (self->priv->changed_files_lister) {
-    g_object_unref (self->priv->changed_files_lister);
-  }
-  self->priv->changed_files_lister = ggu_git_show_new ();
+  GGU_SOPTR (self->priv->changed_files_lister,  ggu_git_show_new ());
   g_cancellable_reset (self->priv->changed_files_list_cancellable);
   ggu_panel_loading_push (self);
   ggu_git_list_files_changed_async (self->priv->changed_files_lister,

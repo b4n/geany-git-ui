@@ -42,6 +42,7 @@
 
 #include "ggu-glib-compat.h"
 #include "ggu-gtk-compat.h"
+#include "ggu-utils.h"
 
 
 #define FRAME_DURATION 30
@@ -98,10 +99,7 @@ ggu_fade_out_widget_finalize (GObject *object)
 {
   GguFadeOutWidget *self = GGU_FADE_OUT_WIDGET (object);
   
-  if (self->priv->pixbuf) {
-    g_object_unref (self->priv->pixbuf);
-    self->priv->pixbuf = NULL;
-  }
+  GGU_USOPTR (self->priv->pixbuf);
   if (self->priv->source) {
     g_source_destroy (self->priv->source);
     self->priv->source = NULL;
