@@ -45,11 +45,11 @@ struct _GguHistoryViewPrivate
 };
 
 
-static void       ggu_history_view_get_propery                (GObject    *object,
+static void       ggu_history_view_get_property               (GObject    *object,
                                                                guint       prop_id,
                                                                GValue     *value,
                                                                GParamSpec *pspec);
-static void       ggu_history_view_set_propery                (GObject      *object,
+static void       ggu_history_view_set_property               (GObject      *object,
                                                                guint         prop_id,
                                                                const GValue *value,
                                                                GParamSpec   *pspec);
@@ -86,8 +86,8 @@ ggu_history_view_class_init (GguHistoryViewClass *klass)
   GtkWidgetClass   *widget_class    = GTK_WIDGET_CLASS (klass);
   GguTreeViewClass *tree_view_class = GGU_TREE_VIEW_CLASS (klass);
   
-  object_class->get_property  = ggu_history_view_get_propery;
-  object_class->set_property  = ggu_history_view_set_propery;
+  object_class->get_property  = ggu_history_view_get_property;
+  object_class->set_property  = ggu_history_view_set_property;
   
   widget_class->query_tooltip = ggu_history_view_query_tooltip;
   
@@ -147,10 +147,10 @@ ggu_history_view_init (GguHistoryView *self)
 }
 
 static void
-ggu_history_view_get_propery (GObject    *object,
-                              guint       prop_id,
-                              GValue     *value,
-                              GParamSpec *pspec)
+ggu_history_view_get_property (GObject    *object,
+                               guint       prop_id,
+                               GValue     *value,
+                               GParamSpec *pspec)
 {
   GguHistoryView *self = GGU_HISTORY_VIEW (object);
   
@@ -166,10 +166,10 @@ ggu_history_view_get_propery (GObject    *object,
 }
 
 static void
-ggu_history_view_set_propery (GObject      *object,
-                              guint         prop_id,
-                              const GValue *value,
-                              GParamSpec   *pspec)
+ggu_history_view_set_property (GObject      *object,
+                               guint         prop_id,
+                               const GValue *value,
+                               GParamSpec   *pspec)
 {
   GguHistoryView *self = GGU_HISTORY_VIEW (object);
   
