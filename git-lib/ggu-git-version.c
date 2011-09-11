@@ -56,12 +56,18 @@ ggu_git_get_version_parse_output (GguGit             *obj,
   if (! re) {
     g_warning ("Regex compiltaion failed: %s", err->message);
     g_error_free (err);
-  } else if (g_regex_match (re, output, 0, &infos)) {
-    op->success = TRUE;
-    op->v[0] = atoi (g_match_info_fetch (infos, 1));
-    op->v[1] = atoi (g_match_info_fetch (infos, 2));
-    op->v[2] = atoi (g_match_info_fetch (infos, 3));
-    op->v[3] = atoi (g_match_info_fetch (infos, 4));
+  } else {
+    if (g_regex_match (re, output, 0, &infos)) {
+      gchar *match;
+      
+      op->success = TRUE;
+      op->v[0] = atoi (match = g_match_info_fetch (infos, 1)); g_free (match);
+      op->v[1] = atoi (match = g_match_info_fetch (infos, 2)); g_free (match);
+      op->v[2] = atoi (match = g_match_info_fetch (infos, 3)); g_free (match);
+      op->v[3] = atoi (match = g_match_info_fetch (infos, 4)); g_free (match);
+    }
+    g_match_info_free (infos);
+    g_regex_unref (re);
   }
   g_simple_async_result_set_op_res_gpointer (result, op, g_free);
 }
