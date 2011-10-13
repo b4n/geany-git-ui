@@ -61,10 +61,17 @@ ggu_git_get_version_parse_output (GguGit             *obj,
       gchar *match;
       
       op->success = TRUE;
-      op->v[0] = atoi (match = g_match_info_fetch (infos, 1)); g_free (match);
-      op->v[1] = atoi (match = g_match_info_fetch (infos, 2)); g_free (match);
-      op->v[2] = atoi (match = g_match_info_fetch (infos, 3)); g_free (match);
-      op->v[3] = atoi (match = g_match_info_fetch (infos, 4)); g_free (match);
+      #define GET_INT_MATCH(n) \
+        ((match = g_match_info_fetch (infos, (n))) \
+         ? atoi (match) \
+         : 0)
+      
+      op->v[0] = GET_INT_MATCH (1); g_free (match);
+      op->v[1] = GET_INT_MATCH (2); g_free (match);
+      op->v[2] = GET_INT_MATCH (3); g_free (match);
+      op->v[3] = GET_INT_MATCH (4); g_free (match);
+      
+      #undef GET_INT_MATCH
     }
     g_match_info_free (infos);
     g_regex_unref (re);
