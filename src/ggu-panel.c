@@ -296,6 +296,8 @@ ggu_panel_init (GguPanel *self)
   gtk_box_pack_start (GTK_BOX (vbox), scrolled, TRUE, TRUE, 0);
   self->priv->history_store = ggu_history_store_new ();
   self->priv->history_view = ggu_history_view_new (self->priv->history_store);
+  gtk_tree_view_set_search_column (GTK_TREE_VIEW (self->priv->history_view),
+                                   GGU_HISTORY_STORE_COLUMN_ENTRY);
   g_signal_connect_after (self->priv->history_view, "populate-popup",
                           G_CALLBACK (history_view_populate_popup_handler), self);
   gtk_container_add (GTK_CONTAINER (scrolled), self->priv->history_view);
