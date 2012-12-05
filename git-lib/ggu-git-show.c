@@ -250,6 +250,8 @@ ggu_git_show_show_async (GguGitShow          *self,
 {
   gchar **argv;
   
+  g_return_if_fail (diff || file); /* can't get content without file */
+  
   g_object_set (self,
                 "dir", dir,
                 "rev", rev,
