@@ -31,8 +31,9 @@ G_BEGIN_DECLS
 /* sets @p to @v, calling @free_func on @p before if not @null */
 #define ggu_set_pointer_full(p, v, f)  \
   G_STMT_START {                       \
-    gpointer tmp = (p);                \
-    (p) = (v);                         \
+    void **ptr = (void **) &(p);       \
+    void  *tmp = *ptr;                 \
+    *ptr = (v);                        \
     if (tmp) {                         \
       (f) (tmp);                       \
     }                                  \
