@@ -54,7 +54,7 @@ ggu_git_get_version_parse_output (GguGit             *obj,
   re = g_regex_new ("([0-9]+)(?:\\.([0-9]+)(?:\\.([0-9]+)(?:\\.([0-9]+))?)?)?",
                     0, 0, &err);
   if (! re) {
-    g_warning ("Regex compiltaion failed: %s", err->message);
+    g_warning ("Regex compilation failed: %s", err->message);
     g_error_free (err);
   } else {
     if (g_regex_match (re, output, 0, &infos)) {
