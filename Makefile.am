@@ -8,6 +8,8 @@ ggu_git_lib_sources = git-lib/ggu-git.c \
                       git-lib/ggu-git.h \
                       git-lib/ggu-git-branch.c \
                       git-lib/ggu-git-branch.h \
+                      git-lib/ggu-git-blame-entry.c \
+                      git-lib/ggu-git-blame-entry.h \
                       git-lib/ggu-git-files-changed-entry.c \
                       git-lib/ggu-git-files-changed-entry.h \
                       git-lib/ggu-git-log.c \

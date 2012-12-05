@@ -77,6 +77,16 @@ void              ggu_git_list_files_changed_async  (GguGitShow          *self,
 GList            *ggu_git_list_files_changed_finish (GguGitShow          *self,
                                                      GAsyncResult        *result,
                                                      GError             **error);
+void              ggu_git_blame_async               (GguGitShow          *self,
+                                                     const gchar         *dir,
+                                                     const gchar         *rev,
+                                                     const gchar         *file,
+                                                     GCancellable        *cancellable,
+                                                     GAsyncReadyCallback  callback,
+                                                     gpointer             user_data);
+GList            *ggu_git_blame_finish              (GguGitShow          *self,
+                                                     GAsyncResult        *result,
+                                                     GError             **error);
 
 
 G_END_DECLS

@@ -21,13 +21,16 @@
 #include "ggu-git-show.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <glib.h>
 #include <glib-object.h>
 #include <gio/gio.h>
 
 #include "ggu-glib-compat.h"
 #include "ggu-git.h"
+#include "ggu-git-utils.h"
 #include "ggu-git-files-changed-entry.h"
+#include "ggu-git-blame-entry.h"
 
 
 struct _GguGitShowPrivate
@@ -452,6 +455,204 @@ GList *
 ggu_git_list_files_changed_finish (GguGitShow    *self,
                                    GAsyncResult  *result,
                                    GError       **error)
+{
+  return _ggu_git_run_finish (GGU_GIT (self), result, error);
+}
+
+
+
+static const gchar *
+skip_hash (const gchar *line)
+{
+  register const gchar *p = line;
+  
+  while (g_ascii_isxdigit (*p)) {
+    p++;
+  }
+  
+  if (p - line == 40 && (! *p || g_ascii_isspace (*p))) {
+    return p;
+  } else {
+    return NULL;
+  }
+}
+
+static void
+entry_list_unref (GList *entries)
+{
+  g_list_free_full (entries, (GDestroyNotify) ggu_git_blame_entry_unref);
+}
+
+static void
+ggu_git_blame_parse_output (GguGit             *obj,
+                            const gchar        *output,
+                            GSimpleAsyncResult *result,
+                            GCancellable       *cancellable)
+{
+  /* Format:
+   * 
+   * <hash> <rigline> <line> <n_following>
+   * author <name>
+   * author-mail <email>
+   * ... <many headers>
+   * \t<line content>
+   * 
+   * the headers may be omitted if they are the same as the previous ones
+   */
+  
+  gchar **lines = g_strsplit (output, "\n", 0);
+  gchar **p;
+  glong   count = 0;
+  GList  *entries = NULL;
+  
+  for (p = lines; *p; p++) {
+    const gchar      *line = skip_hash (*p);
+    gchar            *end;
+    GguGitBlameEntry *entry;
+    
+    if (! line) {
+      continue;
+    }
+    
+    entry = ggu_git_blame_entry_new ();
+    entries = g_list_prepend (entries, entry);
+    entry->hash = g_strndup (*p, (gsize) (line - *p));
+    
+    if (--count > 0) {
+      const GguGitBlameEntry *old = entries->next->data;
+      
+      if (strcmp (entry->hash, old->hash) != 0) {
+        g_simple_async_result_set_error (result, GGU_GIT_ERROR,
+                                         GGU_GIT_ERROR_INVALID_RESULT,
+                                         "Corrupted output: grouped commits with different hashes");
+        break;
+      }
+      
+      entry->line = old->line + 1;
+      entry->author = g_strdup (old->author);
+      continue;
+    }
+    
+    
+    while (*(++line) != ' '); /* oldline */
+    entry->line = strtoul (line, &end, 0); /* line*/
+    if (line == end) {
+      g_simple_async_result_set_error (result, GGU_GIT_ERROR,
+                                       GGU_GIT_ERROR_INVALID_RESULT,
+                                       "Corrupted output: missing line number");
+      break;
+    }
+    line = end;
+    
+    count = strtol (line, &end, 10);
+    if (line == end || *end != 0) {
+      g_simple_async_result_set_error (result, GGU_GIT_ERROR,
+                                       GGU_GIT_ERROR_INVALID_RESULT,
+                                       "Corrupted output: missing commit count");
+      break;
+    }
+    
+    /* now get the author name */
+    line = *(++p);
+    if (! line) {
+      g_simple_async_result_set_error (result, GGU_GIT_ERROR,
+                                       GGU_GIT_ERROR_INVALID_RESULT,
+                                       "Corrupted output: truncated data");
+      break;
+    }
+    
+    if (g_str_has_prefix (line, "author ")) {
+      entry->author = ggu_git_utf8_ensure_valid (line + 7);  /* skip "author " */
+    } else if (entries) {
+      const GguGitBlameEntry *old = entries->next->data;
+      
+      entry->author = g_strdup (old->author);
+    } else {
+      g_simple_async_result_set_error (result, GGU_GIT_ERROR,
+                                       GGU_GIT_ERROR_INVALID_RESULT,
+                                       "Corrupted output: missing author info");
+      break;
+    }
+  }
+  
+  entries = g_list_reverse (entries);
+  g_simple_async_result_set_op_res_gpointer (result, entries,
+                                             (GDestroyNotify) entry_list_unref);
+  g_strfreev (lines);
+}
+
+/**
+ * ggu_git_blame_async:
+ * @self: A #GguGitShow object
+ * @dir: Directory to run in
+ * @rev: Revision to blame, or %NULL for HEAD
+ * @file: File to blame
+ * @cancellable: A #GCancellable object, or %NULL
+ * @callback: The callback to be called when the operation result is ready
+ * @user_data: User data for @callback
+ * 
+ * Performs a `git blame` inside @dir for file @file at revision @rev.
+ * 
+ * @callback can obtain the operation result using ggu_git_blame_finish().
+ */
+void
+ggu_git_blame_async (GguGitShow          *self,
+                     const gchar         *dir,
+                     const gchar         *rev,
+                     const gchar         *file,
+                     GCancellable        *cancellable,
+                     GAsyncReadyCallback  callback,
+                     gpointer             user_data)
+{
+  const gchar *argv[] = {
+    "git",
+    "blame",
+    /*"-p",*/ /* porcelain is buggy, sometimes it forgets to output
+               * headers although that line doesn't has the same headers than
+               * the previous one.  so, use --line-porcelain */
+    "--line-porcelain",
+    NULL, /* rev */
+    NULL, /* -- */
+    NULL, /* file */
+    NULL
+  };
+  guint i = 3;
+  
+  g_return_if_fail (file != NULL);
+  
+  if (rev) {
+    argv[i++] = rev;
+  }
+  argv[i++] = "--";
+  argv[i++] = file;
+  
+  g_object_set (self,
+                "dir", dir,
+                "rev", rev,
+                "file", file,
+                "diff", FALSE,
+                NULL);
+  
+  _ggu_git_run_async (GGU_GIT (self), (gchar **) argv,
+                      ggu_git_blame_parse_output,
+                      G_PRIORITY_DEFAULT, cancellable, callback, user_data);
+}
+
+/**
+ * ggu_git_blame_finish:
+ * @self: The #GguGitShow object that launched the operation
+ * @result: The #GAsyncResult of the operation
+ * @error: Return location for errors or %NULL to ignore
+ * 
+ * Gets the result of a blame operation.
+ * 
+ * Returns: (transfer none) (element-type GguGitBlameEntry): The list of blame
+ *                                                           entries.
+ */
+GList *
+ggu_git_blame_finish (GguGitShow   *self,
+                      GAsyncResult *result,
+                      GError      **error)
 {
   return _ggu_git_run_finish (GGU_GIT (self), result, error);
 }
