@@ -28,6 +28,7 @@
 
 #include "ggu-glib-compat.h"
 #include "ggu-git.h"
+#include "ggu-git-utils.h"
 #include "ggu-git-log-entry.h"
 
 
@@ -288,9 +289,9 @@ ggu_git_log_parse_output (GguGit             *obj,
     
     entry = ggu_git_log_entry_new ();
     entry->hash    = g_strdup (chunks[i+0]);
-    entry->date    = g_strdup (chunks[i+1]);
-    entry->author  = g_strdup (chunks[i+2]);
-    entry->summary = g_strdup (chunks[i+3]);
+    entry->date    = ggu_git_utf8_ensure_valid (chunks[i+1]);
+    entry->author  = ggu_git_utf8_ensure_valid (chunks[i+2]);
+    entry->summary = ggu_git_utf8_ensure_valid (chunks[i+3]);
     entry->details = parse_message (chunks[i+4]);
     
     entries = g_list_prepend (entries, entry);

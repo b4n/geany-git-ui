@@ -74,3 +74,31 @@ ggu_git_parse_path (const gchar *path,
   
   return found;
 }
+
+/**
+ * ggu_git_utf8_ensure_valid:
+ * @str: A string
+ * 
+ * Makes @str valid UTF-8, replacing invalid bytes by Unicode U+FFFD.
+ * 
+ * Returns: A newly allocated copy of @str as a valid UTF-8 string.
+ */
+gchar *
+ggu_git_utf8_ensure_valid (const gchar *str)
+{
+  const gchar  *end;
+  gboolean      valid;
+  GString      *valid_str;
+  
+  valid_str = g_string_new (NULL);
+  do {
+    valid = g_utf8_validate (str, -1, &end);
+    g_string_append_len (valid_str, str, end - str);
+    if (! valid) {
+      g_string_append_unichar (valid_str, 0xfffd);
+      str = end + 1;
+    }
+  } while (! valid);
+  
+  return g_string_free (valid_str, FALSE);
+}

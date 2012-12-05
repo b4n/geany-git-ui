@@ -30,6 +30,7 @@ G_BEGIN_DECLS
 gboolean  ggu_git_parse_path        (const gchar *path,
                                      gchar      **root_,
                                      gchar      **inner_path_);
+gchar    *ggu_git_utf8_ensure_valid (const gchar *str);
 
 
 G_END_DECLS
