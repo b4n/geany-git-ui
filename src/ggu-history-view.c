@@ -72,6 +72,11 @@ static void       ggu_history_view_summary_cell_set_data_func (GtkCellLayout   *
                                                                GtkTreeModel    *model,
                                                                GtkTreeIter     *iter,
                                                                gpointer         data);
+static gboolean   ggu_history_view_search_equal_func          (GtkTreeModel *model,
+                                                               gint          column,
+                                                               const gchar  *key,
+                                                               GtkTreeIter  *iter,
+                                                               gpointer      data);
 
 
 G_DEFINE_TYPE (GguHistoryView,
@@ -115,6 +120,10 @@ ggu_history_view_init (GguHistoryView *self)
   
   gtk_tree_view_set_headers_visible (GTK_TREE_VIEW (self), FALSE);
   gtk_widget_set_has_tooltip (GTK_WIDGET (self), TRUE);
+  
+  gtk_tree_view_set_search_equal_func (GTK_TREE_VIEW (self),
+                                       ggu_history_view_search_equal_func,
+                                       NULL, NULL);
   
   /* hash column */
   self->priv->hash_column = gtk_tree_view_column_new ();
@@ -281,6 +290,20 @@ ggu_history_view_summary_cell_set_data_func (GtkCellLayout   *cell_layout,
   
   entry = ggu_history_store_get_entry (GGU_HISTORY_STORE (model), iter);
   g_object_set (G_OBJECT (cell), "text", entry->summary, NULL);
+}
+
+static gboolean
+ggu_history_view_search_equal_func (GtkTreeModel *model,
+                                    gint          column,
+                                    const gchar  *key,
+                                    GtkTreeIter  *iter,
+                                    gpointer      data)
+{
+  GguGitLogEntry *entry;
+  
+  /* no need to bother about the column, GguHistoryStore has only one anyway */
+  entry = ggu_history_store_get_entry (GGU_HISTORY_STORE (model), iter);
+  return g_str_has_prefix (entry->hash, key) == FALSE;
 }
 
 
