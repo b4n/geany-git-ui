@@ -451,6 +451,16 @@ ggu_panel_set_git_path (GguPanel    *self,
 #define LOG_ENTRY_KEY "ggu-log-entry"
 
 static void
+show_commit_diff_activate_handler (GtkMenuItem *item,
+                                   GguPanel    *self)
+{
+  GguGitLogEntry *entry;
+  
+  entry = g_object_get_data (G_OBJECT (item), LOG_ENTRY_KEY);
+  ggu_panel_show_rev (self, NULL, entry->hash, TRUE, NULL);
+}
+
+static void
 show_diff_activate_handler (GtkMenuItem *item,
                             GguPanel    *self)
 {
@@ -517,6 +527,12 @@ history_view_populate_popup_handler (GguHistoryView *view,
     entry = ggu_history_store_get_entry (self->priv->history_store, iter);
   }
 
+  /* <sep> */
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
+  /* show commit diff */
+  item = history_view_create_popup_menu_item (self, _("Show _commit diff"), entry,
+                                              show_commit_diff_activate_handler);
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
   /* <sep> */
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), gtk_separator_menu_item_new ());
   /* show diff */
@@ -811,8 +827,8 @@ ggu_panel_show_rev_async_finished_handler (GObject      *object,
     gboolean       diff;
     gchar         *rev;
     gchar         *path;
-    gchar         *filename;
     gchar         *document_name;
+    gchar         *filename = NULL;
     GeanyFiletype *ft = NULL;
     
     doc = g_object_get_data (object, DOCUMENT_KEY);
@@ -820,13 +836,20 @@ ggu_panel_show_rev_async_finished_handler (GObject      *object,
     g_return_if_fail (doc == NULL || DOC_VALID (doc));
     
     g_object_get (object, "diff", &diff, "rev", &rev, "file", &path, NULL);
-    filename = g_path_get_basename (path);
+    if (path) {
+      filename = g_path_get_basename (path);
+    }
     if (diff) {
       ft = filetypes[GEANY_FILETYPES_DIFF];
-      document_name = g_strdup_printf (_("Diff of %s at revision %.7s"),
-                                       filename, rev);
+      if (filename) {
+        document_name = g_strdup_printf (_("Diff of %s at revision %.7s"),
+                                         filename, rev);
+      } else {
+        document_name = g_strdup_printf (_("Diff of revision %.7s"), rev);
+      }
     } else {
       ft = self->priv->doc->file_type;
+      /* FIXME: can filename be NULL here? */
       document_name = g_strdup_printf (_("%s at revision %.7s"), filename, rev);
     }
     
