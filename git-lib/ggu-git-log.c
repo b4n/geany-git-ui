@@ -194,28 +194,6 @@ ggu_git_log_new (void)
 }
 
 /*
- * is_git_hash:
- * @hash: a string
- * 
- * Checks if a string is a possibly valid Git hash
- * 
- * Returns: whether @str looks OK
- */
-static gboolean
-is_git_hash (const gchar *hash)
-{
-  guint i;
-  
-  for (i = 0; hash[i]; i++) {
-    if (! g_ascii_isxdigit (hash[i])) {
-      return FALSE;
-    }
-  }
-  
-  return i == 40;
-}
-
-/*
  * parse_message:
  * @msg: a raw commit message
  * 
@@ -290,7 +268,7 @@ ggu_git_log_parse_output (GguGit             *obj,
     /* there is a leading \n after each entry, then before each hash that is
      * not the first one */
     g_strchug (chunks[i]);
-    if (! is_git_hash (chunks[i])) {
+    if (! ggu_git_is_hash (chunks[i])) {
       g_simple_async_result_set_error (result, GGU_GIT_LOG_ERROR,
                                        GGU_GIT_LOG_ERROR_INVALID_RESULT,
                                        "Corrupted output: don't start with a hash");

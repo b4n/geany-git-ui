@@ -102,3 +102,25 @@ ggu_git_utf8_ensure_valid (const gchar *str)
   
   return g_string_free (valid_str, FALSE);
 }
+
+/**
+ * ggu_git_is_hash:
+ * @hash: a string
+ * 
+ * Checks if a string is a possibly valid Git hash
+ * 
+ * Returns: whether @str looks OK
+ */
+gboolean
+ggu_git_is_hash (const gchar *hash)
+{
+  guint i;
+  
+  for (i = 0; hash[i]; i++) {
+    if (! g_ascii_isxdigit (hash[i])) {
+      return FALSE;
+    }
+  }
+  
+  return i == 40;
+}

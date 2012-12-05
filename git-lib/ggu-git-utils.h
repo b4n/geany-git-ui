@@ -31,6 +31,7 @@ gboolean  ggu_git_parse_path        (const gchar *path,
                                      gchar      **root_,
                                      gchar      **inner_path_);
 gchar    *ggu_git_utf8_ensure_valid (const gchar *str);
+gboolean  ggu_git_is_hash           (const gchar *hash);
 
 
 G_END_DECLS
