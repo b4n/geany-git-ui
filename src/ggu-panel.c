@@ -1086,7 +1086,9 @@ ggu_panel_set_document (GguPanel       *self,
   }
   
   self->priv->doc = DOC_VALID (doc) ? doc : NULL;
-  path = self->priv->doc ? self->priv->doc->file_name : NULL;
+  path = self->priv->doc && g_path_is_absolute (self->priv->doc->file_name)
+    ? self->priv->doc->file_name
+    : NULL;
   
   is_valid = ggu_git_parse_path (path, &root, &inner_path);
   gtk_widget_set_sensitive (GTK_WIDGET (self), is_valid);
