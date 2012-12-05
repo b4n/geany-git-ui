@@ -231,14 +231,24 @@ parse_message (const gchar *msg)
   gchar    *formatted;
   
   builder = g_string_new (NULL);
-  for (; *msg; msg++) {
-    if (! prev_newline && *msg == '\n' && g_ascii_isalnum (msg[1])) {
-      /* transform this newline by a space */
-      g_string_append_c (builder, ' ');
+  while (*msg) {
+    gunichar wc = g_utf8_get_char_validated (msg, -1);
+    
+    if (G_UNLIKELY (wc & 0x80000000)) {
+      /* replace invalid UTF-8 characters by U+FFFD */
+      g_string_append_unichar (builder, 0xfffd);
+      prev_newline = FALSE;
+      msg ++;
     } else {
-      g_string_append_c (builder, *msg);
+      if (! prev_newline && *msg == '\n' && g_unichar_isalnum (msg[1])) {
+        /* transform this newline by a space */
+        g_string_append_c (builder, ' ');
+      } else {
+        g_string_append_unichar (builder, wc);
+      }
+      prev_newline = *msg == '\n';
+      msg = g_utf8_next_char (msg);
     }
-    prev_newline = *msg == '\n';
   }
   
   formatted = g_string_free (builder, FALSE);
