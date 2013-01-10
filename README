@@ -1,0 +1,52 @@
+This plugin aims at providing an UI inside Geany to interact with Git
+repositories.  It is currently lacking a lot of features and basically only
+provides an history view allowing to browse a file's history and see the diffs
+between many things.
+
+
+Building
+========
+
+This package use regular Autotools, so you just need to run them.  The
+requirements are:
+
+* A C compiler (e.g. gcc);
+* autoconf;
+* automake;
+* libtool;
+* make;
+* GTK2 development files (`libgtk2.0-dev` on Debian);
+* Geany development files (inside the `geany` package on Debian).
+
+Now, prepare the build system::
+
+    $ ./autogen.sh
+
+and then configure::
+
+    $ ./configure
+
+and finally, build it::
+
+    $ make
+
+Don't run `make install`, it won't do anything sensible for now.  You need to
+manually install the plugin file.  Next steps will install the plugin in your
+user's Geany configuration directory, if you want to install it system-wide,
+just update the paths accordingly.  First, make sure the target directory
+actually exists::
+
+    $ [ -d ~/.config/geany/plugins/ ] || mkdir ~/.config/geany/plugins/
+
+and then, ask Libtool to install it, performing any required modifications on
+it::
+
+    $ libtool --mode install install .libs/libgeany-git-ui.so ~/.config/geany/plugins/
+
+
+Using it
+========
+
+Enable the plugin in Geany's plugin manager dialog.  A new tab labeled "Git"
+will appear on the left pane, and will display the history of the current file
+if it is inside a Git repository.
